@@ -308,32 +308,183 @@ def evaluate_scope(flags_by_lens: dict[str, set[int]],
     return rows, uni
 
 
+# ---------------------------------------------------------------------------
+# 5. Recovery timeline: EXPLOIT-only (A) vs DIVERSITY + EXPLORATION (B)
+# ---------------------------------------------------------------------------
+#
+# A 6-round timeline on a moving adversary. Rounds 0-2 only cohort 1 is active
+# (score on cohort 1). At ADAPT_ROUND the adversary adapts and cohort 2 turns on
+# (score on the combined network from then on). Both arms run the SAME timeline.
+
+ROUNDS = 6
+ADAPT_ROUND = 3
+ARM_A_POP = 3        # exploit arm: best lens + mutated copies
+ENSEMBLE_SIZE = 4    # diversity arm: fixed-size coverage-aware ensemble
+EXPLORE = 2          # diversity arm: candidate lenses generated per round
+
+# A lens's flagged-id set is constant across rounds (the registry never changes;
+# only the scoring scope flips), so cache it -- the whole timeline stays cheap.
+_FLAG_CACHE: dict[str, set[int]] = {}
+
+
+def flags_for(prompt: str) -> set[int]:
+    if prompt not in _FLAG_CACHE:
+        _FLAG_CACHE[prompt] = make_openai_detector(prompt)(REGISTRY)
+    return _FLAG_CACHE[prompt]
+
+
+def round_scope(r: int) -> tuple[set[int], set[int]]:
+    """(truth, exclude) for round r. Cohort 1 only until the adversary adapts."""
+    if r < ADAPT_ROUND:
+        return COHORT_1, COHORT_2     # cohort 2 not active yet -> excluded from scoring
+    return ANSWER_KEY, set()          # combined network
+
+
+def _lens_f1(prompt: str, truth: set[int], exclude: set[int]) -> float:
+    return score(flags_for(prompt) - exclude, truth - exclude).f1
+
+
+def _union_f1(lenses: list[tuple[str, str]], truth: set[int], exclude: set[int]) -> float:
+    u: set[int] = set()
+    for _, p in lenses:
+        u |= flags_for(p)
+    return score(u - exclude, truth - exclude).f1
+
+
+def _select_ensemble(lenses: list[tuple[str, str]], truth: set[int],
+                     exclude: set[int], size: int) -> list[tuple[str, str]]:
+    """Coverage-aware fixed-size selection: maximize union F1, reward unique TPs."""
+    t = truth - exclude
+    chosen: list[tuple[str, str]] = []
+    union: set[int] = set()
+    covered: set[int] = set()
+    remaining = list(lenses)
+    while remaining and len(chosen) < size:
+        best, best_key = None, None
+        for lens in remaining:
+            f = flags_for(lens[1]) - exclude
+            key = (score(union | f, t).f1, len((f & t) - covered))
+            if best_key is None or key > best_key:
+                best, best_key = lens, key
+        chosen.append(best)
+        fb = flags_for(best[1]) - exclude
+        union |= fb
+        covered |= fb & t
+        remaining.remove(best)
+    return chosen
+
+
+def mutate_lens(prompt: str) -> str:
+    """Rewrite a lens into an improved variant (used by the exploit arm)."""
+    from openai import OpenAI
+
+    client = OpenAI()
+    meta = (
+        "Below is a SYSTEM PROMPT for one lens of a shell-company detection swarm that "
+        "reads a whole company registry and returns the ids of likely illicit entities.\n"
+        "Rewrite it into an improved VARIANT that catches more of the network while "
+        "staying concise. Keep the same output behaviour. Return ONLY the rewritten "
+        "system prompt.\n\nSYSTEM PROMPT:\n" + prompt
+    )
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini", temperature=0.7, max_tokens=300,
+        messages=[{"role": "user", "content": meta}],
+    )
+    return (resp.choices[0].message.content or "").strip() or prompt
+
+
+def explore_lens(existing_names: list[str]) -> str:
+    """Propose a NEW lens probing a registry signal the swarm does not yet cover."""
+    from openai import OpenAI
+
+    client = OpenAI()
+    meta = (
+        "You design a NEW lens for a shell-company detection swarm. Each lens is a "
+        "system prompt; the model sees a whole company registry where every record has: "
+        "name, declared industry, address, phone, officers, product keywords, and "
+        "ships_to (the downstream buyer / consignee).\n"
+        f"The swarm already covers these signals: {', '.join(existing_names)}. "
+        "No existing lens examines the ships_to / downstream-buyer field.\n"
+        "Propose ONE new lens that probes a signal the swarm does NOT yet cover -- in "
+        "particular, an unusual number of otherwise-unrelated companies that consign to "
+        "the SAME downstream buyer. Write a concise system prompt telling the model to "
+        "compare across the whole registry and flag entities showing that signal. "
+        "Return ONLY the system prompt."
+    )
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini", temperature=0.8, max_tokens=220,
+        messages=[{"role": "user", "content": meta}],
+    )
+    return (resp.choices[0].message.content or "").strip()
+
+
+def run_arm_exploit() -> list[float]:
+    """ARM A: each round keep the single best lens by F1, refill by mutating it."""
+    pop = list(SYSTEM_PROMPTS.items())
+    traj: list[float] = []
+    for r in range(ROUNDS):
+        truth, exclude = round_scope(r)
+        traj.append(_union_f1(pop, truth, exclude))         # record the swarm we hold
+        best = max(pop, key=lambda L: _lens_f1(L[1], truth, exclude))
+        pop = [best] + [(f"mutA_r{r}_{i}", mutate_lens(best[1]))
+                        for i in range(ARM_A_POP - 1)]       # diversity discarded
+    return traj
+
+
+def run_arm_diversity() -> list[float]:
+    """ARM B: fixed-size coverage ensemble + exploration that probes new signals."""
+    pool = list(SYSTEM_PROMPTS.items())
+    traj: list[float] = []
+    for r in range(ROUNDS):
+        truth, exclude = round_scope(r)
+        sel = _select_ensemble(pool, truth, exclude, ENSEMBLE_SIZE)
+        f1 = _union_f1(sel, truth, exclude)
+        traj.append(f1)                                     # record before this round's exploration
+
+        # Exploration budget: generate candidates; keep those that raise union F1
+        # on the CURRENT scope. They feed the NEXT round's selection.
+        kept: list[tuple[str, str]] = []
+        names = [n for n, _ in pool]
+        for i in range(EXPLORE):
+            cand = (f"explore_r{r}_{i}", explore_lens(names))
+            if cand[1] and _union_f1(sel + [cand], truth, exclude) > f1:
+                kept.append(cand)
+        pool = sel + kept                                   # carry ensemble + discoveries
+    return traj
+
+
 def main() -> None:
-    print("AutoSwarm - shell-network detection (adversary adaptation)\n")
-    print(f"Registry: {len(REGISTRY)} companies")
-    print(f"Cohort 1 (original signals): {sorted(COHORT_1)}")
-    print(f"Cohort 2 (disguised, shared buyer only): {sorted(COHORT_2)}")
-    print(f"Lenses: {[name for name, _ in SWARM]}\n")
+    print("AutoSwarm - shell-network detection: RECOVERY timeline\n")
+    print(f"Registry: {len(REGISTRY)} companies | cohort 1: {sorted(COHORT_1)} | "
+          f"cohort 2: {sorted(COHORT_2)}")
+    print(f"Timeline: {ROUNDS} rounds; cohort 2 activates at round {ADAPT_ROUND}.\n")
 
     if not _check_key():
         return
 
-    print(f"Running {len(SWARM)} lenses (gpt-4o-mini); each sees the WHOLE registry...\n")
-    flags = run_swarm(SWARM, REGISTRY)
+    # Cohort snapshot (primes the flag cache the timeline reuses).
+    flags = {name: flags_for(prompt) for name, prompt in SYSTEM_PROMPTS.items()}
+    _, c1 = evaluate_scope(flags, COHORT_1, COHORT_2)
+    _, c2 = evaluate_scope(flags, COHORT_2, COHORT_1)
+    _, cb = evaluate_scope(flags, ANSWER_KEY, set())
+    print(f"Base swarm union F1 -> cohort1 {c1.f1:.2f} | cohort2 {c2.f1:.2f} | "
+          f"combined {cb.f1:.2f}\n")
 
-    c1_rows, c1_uni = evaluate_scope(flags, COHORT_1, COHORT_2)   # cohort 1 only
-    c2_rows, c2_uni = evaluate_scope(flags, COHORT_2, COHORT_1)   # cohort 2 only
-    cb_rows, cb_uni = evaluate_scope(flags, ANSWER_KEY, set())    # combined
+    print("Running two arms over the timeline (gpt-4o-mini)...\n")
+    arm_a = run_arm_exploit()
+    arm_b = run_arm_diversity()
 
-    print("F1 BY COHORT (current swarm, no recovery yet)")
-    print("=" * 58)
-    print(f"{'LENS':<18}{'COHORT 1':>12}{'COHORT 2':>12}{'COMBINED':>12}")
-    print("-" * 58)
-    for name, _ in SWARM:
-        print(f"{name:<18}{c1_rows[name].f1:>12.2f}{c2_rows[name].f1:>12.2f}{cb_rows[name].f1:>12.2f}")
-    print("-" * 58)
-    print(f"{'ENSEMBLE (union)':<18}{c1_uni.f1:>12.2f}{c2_uni.f1:>12.2f}{cb_uni.f1:>12.2f}")
-    print("=" * 58)
+    print("RECOVERY TIMELINE  (union F1 per round)")
+    print("=" * 56)
+    print(f"{'ROUND':<7}{'ARM A (exploit)':>18}{'ARM B (diverse)':>18}")
+    print("-" * 56)
+    for r in range(ROUNDS):
+        marker = "   <-- adversary adapts" if r == ADAPT_ROUND else ""
+        print(f"{r:<7}{arm_a[r]:>18.2f}{arm_b[r]:>18.2f}{marker}")
+    print("=" * 56)
+    # Easy-to-chart arrays.
+    print(f"ARM_A = {[round(x, 2) for x in arm_a]}")
+    print(f"ARM_B = {[round(x, 2) for x in arm_b]}")
 
 
 if __name__ == "__main__":
