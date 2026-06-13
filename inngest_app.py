@@ -20,15 +20,22 @@ HOW TO RUN (two terminals)
   Then:
    - open the dashboard URL the CLI prints (usually http://localhost:8288)
    - go to the "Functions" tab and confirm "autoswarm-ping" is registered
-   - go to the dashboard's event tester and send an event ({} payload is fine):
-       * autoswarm/ping               -> instant plumbing check
+   - go to the dashboard's event tester and send an event:
+       * autoswarm/ping               -> instant plumbing check ({} payload)
        * autoswarm/evaluate.requested -> REAL swarm run (one OpenAI call per
                                          lens over the whole registry, ~10-20s),
                                          returns {"f1",..,"precision",..,"recall",
                                          ..,"flagged_ids":[...],"n_errors":..}
-   - watch the run appear and the durable step complete with the output.
+       * autoswarm/data.arrived       -> the FINALE: durable cat-and-mouse loop,
+                                         ~1-2s, observable step-by-step. Send
+                                         with data:
+                                           {"scenario":"baseline"}          (healthy)
+                                           {"scenario":"adversary_adapted"} (crater
+                                              -> explore -> evolve -> recover)
+   - watch the run appear and the durable step(s) complete with the output.
 
-  The evaluate run needs OPENAI_API_KEY set in .env.
+  Only autoswarm/evaluate.requested needs OPENAI_API_KEY in .env; the finale
+  replays proven values, so it runs offline.
 ------------------------------------------------------------------------------
 """
 
@@ -102,9 +109,87 @@ def evaluate_swarm(ctx: inngest.ContextSync) -> dict:
     return ctx.step.run("evaluate", _evaluate)
 
 
-# 4. Serve BOTH functions over Flask at the standard Inngest path (/api/inngest).
+# 4. THE FINALE: adaptive cat-and-mouse loop as a durable workflow. Each beat is
+#    its own step.run, so the dashboard shows crater -> explore -> evolve -> recover.
+@inngest_client.create_function(
+    fn_id="autoswarm-monitor-adapt",
+    name="AutoSwarm — monitor & adapt (cat-and-mouse)",
+    trigger=inngest.TriggerEvent(event="autoswarm/data.arrived"),
+)
+def monitor_and_adapt(ctx: inngest.ContextSync) -> dict:
+    """Durable monitor->detect->(explore->evolve->recover) loop.
+
+    Built for a FAST, RELIABLE live demo: the steps REPLAY our already-proven
+    supplychain.py results, so a run is ~1-2s with no live-API wait on stage.
+    The orchestration is real Inngest; the F1 numbers are our experimental
+    values. To run it live in production, swapping the evaluate step to a real
+    swarm call is a one-liner:
+        f1 = sc.score(sc.union_ensemble(sc.run_swarm(sc.SWARM, sc.REGISTRY)),
+                      sc.ANSWER_KEY).f1
+    """
+    scenario = (ctx.event.data or {}).get("scenario", "baseline")
+    THRESHOLD = 0.80
+
+    # 1. Evaluate the swarm's current union F1 for this scenario.
+    def _evaluate() -> dict:
+        f1 = 0.64 if scenario == "adversary_adapted" else 0.94
+        return {"scenario": scenario, "f1": f1}
+
+    current = ctx.step.run("evaluate_current", _evaluate)
+
+    # 2. Has performance dropped below the health threshold?
+    def _detect() -> dict:
+        return {"dropped": current["f1"] < THRESHOLD, "f1": current["f1"], "threshold": THRESHOLD}
+
+    drop = ctx.step.run("detect_drop", _detect)
+
+    # 3a. Healthy path: exploit, no evolution needed.
+    if not drop["dropped"]:
+        def _no_action() -> dict:
+            return {"status": "healthy — swarm exploited, no evolution needed"}
+
+        healthy = ctx.step.run("no_action", _no_action)
+        return {
+            "scenario": scenario,
+            "dropped": False,
+            "trajectory": [current["f1"]],
+            "outcome": healthy["status"],
+        }
+
+    # 3b. Dropped: explore -> evolve -> confirm recovery, each a durable step.
+    def _explore() -> dict:
+        return {"discovered": "shared-consignee / downstream-buyer signal",
+                "note": "probing fields no current lens covers"}
+
+    discovered = ctx.step.run("explore", _explore)
+
+    def _evolve() -> dict:
+        return {"action": "coverage-aware selection + merge added a consignee lens",
+                "new_f1": 1.0}
+
+    evolved = ctx.step.run("evolve_and_select", _evolve)
+
+    def _confirm() -> dict:
+        return {"recovered": True, "f1_before": current["f1"], "f1_after": evolved["new_f1"]}
+
+    recovery = ctx.step.run("confirm_recovery", _confirm)
+
+    # 4. Final summary with the trajectory.
+    return {
+        "scenario": scenario,
+        "dropped": True,
+        "discovered": discovered["discovered"],
+        "action": evolved["action"],
+        "recovered": recovery["recovered"],
+        "trajectory": [current["f1"], evolved["new_f1"]],
+        "outcome": (f"recovered {current['f1']} -> {evolved['new_f1']} by "
+                    "rediscovering the surviving consignee invariant"),
+    }
+
+
+# 5. Serve all three functions over Flask at the standard Inngest path (/api/inngest).
 app = Flask(__name__)
-inngest.flask.serve(app, inngest_client, [ping, evaluate_swarm])
+inngest.flask.serve(app, inngest_client, [ping, evaluate_swarm, monitor_and_adapt])
 
 
 def _print_instructions() -> None:
@@ -123,6 +208,8 @@ def _print_instructions() -> None:
     print("  Then open the dashboard (usually http://localhost:8288) and send:")
     print("     'autoswarm/ping'                -> instant plumbing check")
     print("     'autoswarm/evaluate.requested'  -> real swarm run (~10-20s, OpenAI)")
+    print("     'autoswarm/data.arrived'        -> FINALE cat-and-mouse loop (~1-2s)")
+    print("         data {\"scenario\":\"baseline\"} or {\"scenario\":\"adversary_adapted\"}")
     print("=" * 72)
 
 
