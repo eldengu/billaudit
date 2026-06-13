@@ -39,76 +39,98 @@ class Entity:
     phone: str
     officers: tuple[str, ...]
     product_keywords: tuple[str, ...]
+    ships_to: str  # downstream buyer / consignee
 
 
-# 40 companies. Most are ordinary, well-separated businesses (distinct cities,
-# unique phones/officers, keywords that match their declared industry).
+# 48 companies across two waves. Most are ordinary, well-separated businesses
+# (distinct cities, unique phones/officers, keywords matching their industry, and
+# varied downstream buyers -- with a couple of benign shared buyers as noise).
 #
-# Planted inside is an 8-entity illicit network (answer key below) tied together
-# by VERIFIABLE shared signals, mixing obvious with subtle:
+# COHORT 1 (ids 4,9,13,18,22,27,31,36) -- the original network, tied together by
+# VERIFIABLE shared signals the lenses already catch, mixing obvious with subtle:
+#   shared address  "Unit 7, 14 Harbour Mews, Port Kelvin"  -> 4, 9, 13, 31
+#   shared phone    "+1-555-0142"                           -> 13, 18, 31
+#   shared officer  "Dorian Vex"                            -> 4, 9, 18, 31
+#   shared officer  "Marla Quint"                           -> 13, 22, 36
+#   facade mismatch (textiles/apparel/electronics hiding solvent/precursor
+#                    keywords)                               -> 4, 9, 18, 27, 36
+#   clustering in obscure city "Port Kelvin"                -> 4, 9, 13, 22, 31, 36
 #
-#   shared address  "Unit 7, 14 Harbour Mews, Port Kelvin"  -> ids 4, 9, 13, 31
-#   shared phone    "+1-555-0142"                           -> ids 13, 18, 31
-#   shared officer  "Dorian Vex"                            -> ids 4, 9, 18, 31
-#   shared officer  "Marla Quint"                           -> ids 13, 22, 36
-#   facade mismatch (apparel/textiles/electronics, but the
-#                    product keywords read like solvents /
-#                    drug precursors)                        -> ids 4, 9, 18, 27, 36
-#   clustering in the obscure city "Port Kelvin"            -> ids 4, 9, 13, 22, 31, 36
+# COHORT 2 (ids 41-48) -- the ADVERSARY ADAPTATION. After the first network was
+# burned, these EVADE every cohort-1 signal: a UNIQUE address and phone each (no
+# infrastructure overlap), UNIQUE officers (no shared control), and a switched
+# facade to "home appliances / consumer electronics" with keywords that genuinely
+# MATCH that facade (no mismatch to catch). To the current 6 lenses they look
+# clean.
+#   BUT a deeper invariant survives the disguise: all 8 consign to the SAME
+#   downstream buyer, "Granite Bay Distribution Ltd". That signal is present in
+#   the data (ships_to) and catchable -- but NO current lens is tuned to it.
 #
-#   - id 31 is the obvious one: shared address AND phone AND officer.
-#   - id 22 is subtle: only Port Kelvin clustering + shared officer, generic goods.
-#   - id 27 is the hardest: a big-city company with a unique phone/officer whose
-#     ONLY tell is a textile facade hiding chemical-precursor keywords.
-#
-# Decoy noise: ids 7 and 25 are LEGIT firms that share a co-working address
-# ("Suite 200, 1 Civic Plaza, Eastport") -- a benign shared-address false positive
-# so precision actually has to be earned.
+# Decoy noise: ids 7 and 25 are LEGIT firms sharing a co-working address
+# ("Suite 200, 1 Civic Plaza, Eastport"); ids 15, 20, 39 are LEGIT firms sharing
+# the benign buyer "National Retail Group" -- so neither a shared address nor a
+# shared buyer is, alone, proof of anything. Precision has to be earned.
 REGISTRY: list[Entity] = [
-    Entity(1,  "Brightleaf Software Labs", "Software",    "220 Cedar Ave, Riverton",                  "+1-555-0101", ("Anita Roe",),    ("saas", "analytics", "dashboards")),
-    Entity(2,  "Golden Crust Bakery",      "Bakery",      "14 Mill St, Hartwell",                     "+1-555-0102", ("Ben Saito",),    ("bread", "pastries", "sourdough")),
-    Entity(3,  "Summit Dental Care",       "Dental",      "88 Park Rd, Lakeview",                     "+1-555-0103", ("Lena Ford",),    ("dentistry", "hygiene", "implants")),
-    Entity(4,  "Meridian Textile Holdings","Textiles",    "Unit 7, 14 Harbour Mews, Port Kelvin",     "+1-555-0181", ("Dorian Vex",),   ("acetone", "toluene", "drum storage")),                  # BAD: facade + addr cluster + officer Vex (obvious)
-    Entity(5,  "Hartwell Landscaping",     "Landscaping", "5 Garden Way, Hartwell",                   "+1-555-0105", ("Carlos Mund",),  ("lawn", "irrigation", "hedges")),
-    Entity(6,  "Ledger & Vine Accounting", "Accounting",  "410 Finance Blvd, Metro City",             "+1-555-0106", ("Priya Nadar",),  ("tax", "audit", "bookkeeping")),
-    Entity(7,  "Northwind Consulting",     "Consulting",  "Suite 200, 1 Civic Plaza, Eastport",       "+1-555-0107", ("Tom Reyes",),    ("strategy", "advisory")),                                # decoy: legit, shares co-working addr with #25
-    Entity(8,  "Copper Kettle Brewery",    "Brewery",     "33 Barrel Ln, Riverton",                   "+1-555-0108", ("Greta Olsson",), ("beer", "ale", "brewing")),
-    Entity(9,  "Kelvin Weave Trading",     "Textiles",    "Unit 7, 14 Harbour Mews, Port Kelvin",     "+1-555-0182", ("Dorian Vex",),   ("industrial solvents", "reagents", "fabric")),           # BAD: facade + addr cluster + officer Vex (obvious)
-    Entity(10, "Open Page Bookstore",      "Retail",      "9 Read St, Lakeview",                      "+1-555-0110", ("Sam Holt",),     ("books", "stationery")),
-    Entity(11, "Reliable Plumbing",        "Plumbing",    "77 Pipe Rd, Hartwell",                     "+1-555-0111", ("Dee Marsh",),    ("plumbing", "drains", "fixtures")),
-    Entity(12, "Tiny Steps Pediatrics",    "Healthcare",  "120 Wellness Dr, Metro City",              "+1-555-0112", ("Omar Vance",),   ("pediatrics", "vaccines")),
-    Entity(13, "Harbour Mews Imports",     "Logistics",   "Unit 7, 14 Harbour Mews, Port Kelvin",     "+1-555-0142", ("Marla Quint",),  ("freight", "containers", "transshipment")),              # BAD: addr cluster + phone 0142 + officer Quint
-    Entity(14, "Apex Auto Repair",         "Automotive",  "250 Gear St, Riverton",                    "+1-555-0114", ("Rico Tan",),     ("auto repair", "brakes", "engine")),
-    Entity(15, "SunPath Solar",            "Energy",      "60 Bright Rd, Lakeview",                   "+1-555-0115", ("Hana Kim",),     ("solar", "panels", "inverters")),
-    Entity(16, "Roast Republic Coffee",    "Food",        "18 Bean Aly, Eastport",                    "+1-555-0116", ("Lou Park",),     ("coffee", "roasting", "espresso")),
-    Entity(17, "Companion Vet Clinic",     "Veterinary",  "5 Paw Pl, Hartwell",                       "+1-555-0117", ("Iris Bell",),    ("veterinary", "pets")),
-    Entity(18, "Anchor Fabric Supply",     "Apparel",     "3 Dockyard Rd, Brightbay",                 "+1-555-0142", ("Dorian Vex",),   ("precursor chemicals", "glassware", "apparel")),         # BAD: phone 0142 + officer Vex + facade (addr NOT clustered -> subtle)
-    Entity(19, "Bloom & Stem Florist",     "Retail",      "22 Petal St, Metro City",                  "+1-555-0119", ("Nina Cole",),    ("flowers", "bouquets")),
-    Entity(20, "Ironclad Hardware",        "Retail",      "140 Bolt Ave, Riverton",                   "+1-555-0120", ("Walt Greer",),   ("hardware", "tools")),
-    Entity(21, "PulseFit Gym",             "Fitness",     "88 Rep Rd, Lakeview",                      "+1-555-0121", ("Tara Lin",),     ("gym", "fitness", "training")),
-    Entity(22, "Saltmarsh Trading Co",     "Import/Export","41 Old Wharf, Port Kelvin",               "+1-555-0184", ("Marla Quint",),  ("general goods", "wholesale", "brokerage")),             # BAD: Port Kelvin cluster + officer Quint, generic goods -> subtle
-    Entity(23, "Clearview Optometry",      "Healthcare",  "300 Vision Blvd, Metro City",              "+1-555-0123", ("Eli Frost",),    ("optometry", "glasses")),
-    Entity(24, "Maple Catering Co",        "Food",        "7 Feast Ln, Hartwell",                     "+1-555-0124", ("Gabi Ruiz",),    ("catering", "events")),
-    Entity(25, "Eastport Advisory Partners","Consulting", "Suite 200, 1 Civic Plaza, Eastport",       "+1-555-0125", ("Joan Pike",),    ("consulting", "advisory")),                              # decoy: legit, shares co-working addr with #7
-    Entity(26, "Little Sprouts Daycare",   "Childcare",   "14 Cradle Ct, Riverton",                   "+1-555-0126", ("Mary Dunn",),    ("daycare", "childcare")),
-    Entity(27, "Verdant Apparel Group",    "Textiles",    "500 Garment Row, Metro City",              "+1-555-0127", ("Stefan Auer",),  ("nitromethane", "acetic anhydride", "glass reactors")),  # BAD: facade ONLY, big city, unique phone/officer -> hardest
-    Entity(28, "Topline Roofing",          "Construction","90 Shingle St, Hartwell",                  "+1-555-0128", ("Vic Stroud",),   ("roofing", "gutters")),
-    Entity(29, "Cloudpeak Hosting",        "Software",    "700 Server Rd, Metro City",                "+1-555-0129", ("Ada Wynn",),     ("hosting", "cloud", "servers")),
-    Entity(30, "Fresh Fork Diner",         "Food",        "11 Plate St, Lakeview",                    "+1-555-0130", ("Joe Banks",),    ("diner", "breakfast")),
-    Entity(31, "Quay Side Logistics",      "Logistics",   "Unit 7, 14 Harbour Mews, Port Kelvin",     "+1-555-0142", ("Dorian Vex",),   ("freight forwarding", "containers")),                    # BAD: addr cluster + phone 0142 + officer Vex (obvious triple)
-    Entity(32, "Stonebridge Law",          "Legal",       "410 Justice Ave, Metro City",              "+1-555-0132", ("Ruth Calder",),  ("legal", "litigation")),
-    Entity(33, "GreenThumb Nursery",       "Retail",      "6 Sprout Rd, Hartwell",                    "+1-555-0133", ("Pete Salk",),    ("plants", "garden")),
-    Entity(34, "Brightbay Marine",         "Marine",      "2 Harbor View, Brightbay",                 "+1-555-0134", ("Cory Lund",),    ("boats", "marine", "repair")),
-    Entity(35, "Pixel Forge Studio",       "Software",    "15 Render St, Eastport",                   "+1-555-0135", ("Mona Ek",),      ("games", "design")),
-    Entity(36, "Lowtide Components",       "Electronics", "9 Tidewater Rd, Port Kelvin",              "+1-555-0186", ("Marla Quint",),  ("solvent extraction reagents", "lab glassware")),        # BAD: Port Kelvin cluster + officer Quint + facade -> medium
-    Entity(37, "Hearthstone Realty",       "Real Estate", "120 Home Ave, Lakeview",                   "+1-555-0137", ("Dan Voss",),     ("realty", "homes")),
-    Entity(38, "Crisp Linen Laundry",      "Services",    "44 Wash St, Riverton",                     "+1-555-0138", ("Bea Knott",),    ("laundry", "linen")),
-    Entity(39, "Trailhead Outfitters",     "Retail",      "88 Summit Rd, Eastport",                   "+1-555-0139", ("Kip Doran",),    ("outdoor", "gear", "camping")),
-    Entity(40, "Quill & Press Printing",   "Services",    "17 Inkwell Ln, Metro City",                "+1-555-0140", ("Sol Mercer",),   ("printing", "signage")),
+    # ---- COHORT 1 network + legitimate wave (ids 1-40) ----
+    Entity(1,  "Brightleaf Software Labs", "Software",    "220 Cedar Ave, Riverton",                  "+1-555-0101", ("Anita Roe",),    ("saas", "analytics", "dashboards"),                     "direct SaaS clients"),
+    Entity(2,  "Golden Crust Bakery",      "Bakery",      "14 Mill St, Hartwell",                     "+1-555-0102", ("Ben Saito",),    ("bread", "pastries", "sourdough"),                      "Hartwell Grocers Co-op"),
+    Entity(3,  "Summit Dental Care",       "Dental",      "88 Park Rd, Lakeview",                     "+1-555-0103", ("Lena Ford",),    ("dentistry", "hygiene", "implants"),                    "patients (direct)"),
+    Entity(4,  "Meridian Textile Holdings","Textiles",    "Unit 7, 14 Harbour Mews, Port Kelvin",     "+1-555-0181", ("Dorian Vex",),   ("acetone", "toluene", "drum storage"),                  "Anchor Export Co"),       # BAD c1: facade + addr cluster + officer Vex (obvious)
+    Entity(5,  "Hartwell Landscaping",     "Landscaping", "5 Garden Way, Hartwell",                   "+1-555-0105", ("Carlos Mund",),  ("lawn", "irrigation", "hedges"),                        "residential (direct)"),
+    Entity(6,  "Ledger & Vine Accounting", "Accounting",  "410 Finance Blvd, Metro City",             "+1-555-0106", ("Priya Nadar",),  ("tax", "audit", "bookkeeping"),                         "clients (direct)"),
+    Entity(7,  "Northwind Consulting",     "Consulting",  "Suite 200, 1 Civic Plaza, Eastport",       "+1-555-0107", ("Tom Reyes",),    ("strategy", "advisory"),                                "enterprise clients"),     # decoy: legit, shares co-working addr with #25
+    Entity(8,  "Copper Kettle Brewery",    "Brewery",     "33 Barrel Ln, Riverton",                   "+1-555-0108", ("Greta Olsson",), ("beer", "ale", "brewing"),                              "Riverton Beverage Dist."),
+    Entity(9,  "Kelvin Weave Trading",     "Textiles",    "Unit 7, 14 Harbour Mews, Port Kelvin",     "+1-555-0182", ("Dorian Vex",),   ("industrial solvents", "reagents", "fabric"),           "Meridian Wholesale"),     # BAD c1: facade + addr cluster + officer Vex (obvious)
+    Entity(10, "Open Page Bookstore",      "Retail",      "9 Read St, Lakeview",                      "+1-555-0110", ("Sam Holt",),     ("books", "stationery"),                                 "walk-in retail"),
+    Entity(11, "Reliable Plumbing",        "Plumbing",    "77 Pipe Rd, Hartwell",                     "+1-555-0111", ("Dee Marsh",),    ("plumbing", "drains", "fixtures"),                      "residential (direct)"),
+    Entity(12, "Tiny Steps Pediatrics",    "Healthcare",  "120 Wellness Dr, Metro City",              "+1-555-0112", ("Omar Vance",),   ("pediatrics", "vaccines"),                              "patients (direct)"),
+    Entity(13, "Harbour Mews Imports",     "Logistics",   "Unit 7, 14 Harbour Mews, Port Kelvin",     "+1-555-0142", ("Marla Quint",),  ("freight", "containers", "transshipment"),              "Pan-Ocean Freight"),      # BAD c1: addr cluster + phone 0142 + officer Quint
+    Entity(14, "Apex Auto Repair",         "Automotive",  "250 Gear St, Riverton",                    "+1-555-0114", ("Rico Tan",),     ("auto repair", "brakes", "engine"),                     "vehicle owners (direct)"),
+    Entity(15, "SunPath Solar",            "Energy",      "60 Bright Rd, Lakeview",                   "+1-555-0115", ("Hana Kim",),     ("solar", "panels", "inverters"),                        "National Retail Group"),  # decoy: benign shared buyer
+    Entity(16, "Roast Republic Coffee",    "Food",        "18 Bean Aly, Eastport",                    "+1-555-0116", ("Lou Park",),     ("coffee", "roasting", "espresso"),                      "cafe wholesale"),
+    Entity(17, "Companion Vet Clinic",     "Veterinary",  "5 Paw Pl, Hartwell",                       "+1-555-0117", ("Iris Bell",),    ("veterinary", "pets"),                                  "pet owners (direct)"),
+    Entity(18, "Anchor Fabric Supply",     "Apparel",     "3 Dockyard Rd, Brightbay",                 "+1-555-0142", ("Dorian Vex",),   ("precursor chemicals", "glassware", "apparel"),         "Coastal Distributors"),   # BAD c1: phone 0142 + officer Vex + facade (addr NOT clustered -> subtle)
+    Entity(19, "Bloom & Stem Florist",     "Retail",      "22 Petal St, Metro City",                  "+1-555-0119", ("Nina Cole",),    ("flowers", "bouquets"),                                 "walk-in retail"),
+    Entity(20, "Ironclad Hardware",        "Retail",      "140 Bolt Ave, Riverton",                   "+1-555-0120", ("Walt Greer",),   ("hardware", "tools"),                                   "National Retail Group"),  # decoy: benign shared buyer
+    Entity(21, "PulseFit Gym",             "Fitness",     "88 Rep Rd, Lakeview",                      "+1-555-0121", ("Tara Lin",),     ("gym", "fitness", "training"),                          "members (direct)"),
+    Entity(22, "Saltmarsh Trading Co",     "Import/Export","41 Old Wharf, Port Kelvin",               "+1-555-0184", ("Marla Quint",),  ("general goods", "wholesale", "brokerage"),             "Saltmarsh Wholesale"),    # BAD c1: Port Kelvin cluster + officer Quint, generic goods -> subtle
+    Entity(23, "Clearview Optometry",      "Healthcare",  "300 Vision Blvd, Metro City",              "+1-555-0123", ("Eli Frost",),    ("optometry", "glasses"),                                "patients (direct)"),
+    Entity(24, "Maple Catering Co",        "Food",        "7 Feast Ln, Hartwell",                     "+1-555-0124", ("Gabi Ruiz",),    ("catering", "events"),                                  "event clients"),
+    Entity(25, "Eastport Advisory Partners","Consulting", "Suite 200, 1 Civic Plaza, Eastport",       "+1-555-0125", ("Joan Pike",),    ("consulting", "advisory"),                              "enterprise clients"),     # decoy: legit, shares co-working addr with #7
+    Entity(26, "Little Sprouts Daycare",   "Childcare",   "14 Cradle Ct, Riverton",                   "+1-555-0126", ("Mary Dunn",),    ("daycare", "childcare"),                                "families (direct)"),
+    Entity(27, "Verdant Apparel Group",    "Textiles",    "500 Garment Row, Metro City",              "+1-555-0127", ("Stefan Auer",),  ("nitromethane", "acetic anhydride", "glass reactors"),  "Garment Exporters Ltd"),  # BAD c1: facade ONLY, big city, unique phone/officer -> hardest
+    Entity(28, "Topline Roofing",          "Construction","90 Shingle St, Hartwell",                  "+1-555-0128", ("Vic Stroud",),   ("roofing", "gutters"),                                  "homeowners (direct)"),
+    Entity(29, "Cloudpeak Hosting",        "Software",    "700 Server Rd, Metro City",                "+1-555-0129", ("Ada Wynn",),     ("hosting", "cloud", "servers"),                         "online customers"),
+    Entity(30, "Fresh Fork Diner",         "Food",        "11 Plate St, Lakeview",                    "+1-555-0130", ("Joe Banks",),    ("diner", "breakfast"),                                  "walk-in retail"),
+    Entity(31, "Quay Side Logistics",      "Logistics",   "Unit 7, 14 Harbour Mews, Port Kelvin",     "+1-555-0142", ("Dorian Vex",),   ("freight forwarding", "containers"),                    "Pan-Ocean Freight"),      # BAD c1: addr cluster + phone 0142 + officer Vex (obvious triple)
+    Entity(32, "Stonebridge Law",          "Legal",       "410 Justice Ave, Metro City",              "+1-555-0132", ("Ruth Calder",),  ("legal", "litigation"),                                 "clients (direct)"),
+    Entity(33, "GreenThumb Nursery",       "Retail",      "6 Sprout Rd, Hartwell",                    "+1-555-0133", ("Pete Salk",),    ("plants", "garden"),                                    "garden centers"),
+    Entity(34, "Brightbay Marine",         "Marine",      "2 Harbor View, Brightbay",                 "+1-555-0134", ("Cory Lund",),    ("boats", "marine", "repair"),                           "boat owners (direct)"),
+    Entity(35, "Pixel Forge Studio",       "Software",    "15 Render St, Eastport",                   "+1-555-0135", ("Mona Ek",),      ("games", "design"),                                     "publishers"),
+    Entity(36, "Lowtide Components",       "Electronics", "9 Tidewater Rd, Port Kelvin",              "+1-555-0186", ("Marla Quint",),  ("solvent extraction reagents", "lab glassware"),        "Tidewater Supply"),       # BAD c1: Port Kelvin cluster + officer Quint + facade -> medium
+    Entity(37, "Hearthstone Realty",       "Real Estate", "120 Home Ave, Lakeview",                   "+1-555-0137", ("Dan Voss",),     ("realty", "homes"),                                     "home buyers (direct)"),
+    Entity(38, "Crisp Linen Laundry",      "Services",    "44 Wash St, Riverton",                     "+1-555-0138", ("Bea Knott",),    ("laundry", "linen"),                                    "hotels (local)"),
+    Entity(39, "Trailhead Outfitters",     "Retail",      "88 Summit Rd, Eastport",                   "+1-555-0139", ("Kip Doran",),    ("outdoor", "gear", "camping"),                          "National Retail Group"),  # decoy: benign shared buyer
+    Entity(40, "Quill & Press Printing",   "Services",    "17 Inkwell Ln, Metro City",                "+1-555-0140", ("Sol Mercer",),   ("printing", "signage"),                                 "local businesses"),
+
+    # ---- COHORT 2: adversary adaptation (ids 41-48) ----
+    # Unique address + phone + officer each; appliance/electronics facade WITH
+    # matching keywords (no mismatch). Only invariant: all consign to the same
+    # downstream buyer, "Granite Bay Distribution Ltd".
+    Entity(41, "Northgate Appliance Imports","Home Appliances",     "12 Market St, Riverton",         "+1-555-0241", ("Glen Awe",),     ("refrigerators", "dishwashers", "ranges"),              "Granite Bay Distribution Ltd"),  # BAD c2
+    Entity(42, "Crest Home Electronics",   "Consumer Electronics",  "60 Vale Rd, Lakeview",           "+1-555-0242", ("Pia Roth",),     ("televisions", "soundbars", "remotes"),                 "Granite Bay Distribution Ltd"),  # BAD c2
+    Entity(43, "Bluepeak Domestic Goods",  "Home Appliances",       "7 Hill Ave, Hartwell",           "+1-555-0243", ("Sandro Beck",),  ("washing machines", "dryers", "spare parts"),           "Granite Bay Distribution Ltd"),  # BAD c2
+    Entity(44, "Vantage Kitchenware Co",   "Home Appliances",       "210 Oak St, Metro City",         "+1-555-0244", ("Lara Finch",),   ("blenders", "microwaves", "toasters"),                  "Granite Bay Distribution Ltd"),  # BAD c2
+    Entity(45, "Halcyon Electronics Trading","Consumer Electronics","4 Pier Rd, Brightbay",           "+1-555-0245", ("Dmitri Vale",),  ("laptops", "monitors", "cables"),                       "Granite Bay Distribution Ltd"),  # BAD c2
+    Entity(46, "Stillwater Appliance Group","Home Appliances",      "33 Elm Way, Eastport",           "+1-555-0246", ("Owen Marsh",),   ("refrigerators", "freezers", "ice makers"),             "Granite Bay Distribution Ltd"),  # BAD c2
+    Entity(47, "Granary Home Tech",        "Consumer Electronics",  "99 Bridge St, Riverton",         "+1-555-0247", ("Cleo Nash",),    ("smart home", "thermostats", "sensors"),                "Granite Bay Distribution Ltd"),  # BAD c2
+    Entity(48, "Pinnacle White Goods",     "Home Appliances",       "15 Crown Rd, Lakeview",          "+1-555-0248", ("Reed Salt",),    ("ovens", "cooktops", "range hoods"),                    "Granite Bay Distribution Ltd"),  # BAD c2
 ]
 
-# Ground truth: the set of ids that belong to the illicit network (8 total).
-ANSWER_KEY: set[int] = {4, 9, 13, 18, 22, 27, 31, 36}
+# Ground truth, split into cohorts.
+COHORT_1: set[int] = {4, 9, 13, 18, 22, 27, 31, 36}   # original signals (lenses catch these)
+COHORT_2: set[int] = set(range(41, 49))               # disguised; only a shared downstream buyer
+ANSWER_KEY: set[int] = COHORT_1 | COHORT_2
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +180,8 @@ def _format_registry(entities: list[Entity]) -> str:
             f"  id {e.id}: \"{e.name}\" | industry: {e.declared_industry} "
             f"| address: {e.address} | phone: {e.phone} "
             f"| officers: {', '.join(e.officers)} "
-            f"| products: {', '.join(e.product_keywords)}"
+            f"| products: {', '.join(e.product_keywords)} "
+            f"| ships_to: {e.ships_to}"
         )
     return "\n".join(rows)
 
@@ -271,10 +294,25 @@ def _check_key() -> bool:
     return True
 
 
+def evaluate_scope(flags_by_lens: dict[str, set[int]],
+                   truth: set[int], exclude: set[int]) -> tuple[dict[str, Score], Score]:
+    """Score every lens + the union on one cohort scope.
+
+    `exclude` removes the OTHER cohort's bad ids from both predictions and truth,
+    so e.g. the cohort-2 score isn't credited or penalised for cohort-1 hits.
+    Legitimate decoys stay in scope, so precision is still real.
+    """
+    t = truth - exclude
+    rows = {name: score(ids - exclude, t) for name, ids in flags_by_lens.items()}
+    uni = score(union_ensemble(flags_by_lens) - exclude, t)
+    return rows, uni
+
+
 def main() -> None:
-    print("AutoSwarm - shell-network detection (supply-chain domain)\n")
-    print(f"Registry: {len(REGISTRY)} companies | planted network ({len(ANSWER_KEY)}): "
-          f"{sorted(ANSWER_KEY)}")
+    print("AutoSwarm - shell-network detection (adversary adaptation)\n")
+    print(f"Registry: {len(REGISTRY)} companies")
+    print(f"Cohort 1 (original signals): {sorted(COHORT_1)}")
+    print(f"Cohort 2 (disguised, shared buyer only): {sorted(COHORT_2)}")
     print(f"Lenses: {[name for name, _ in SWARM]}\n")
 
     if not _check_key():
@@ -283,17 +321,19 @@ def main() -> None:
     print(f"Running {len(SWARM)} lenses (gpt-4o-mini); each sees the WHOLE registry...\n")
     flags = run_swarm(SWARM, REGISTRY)
 
-    print("RESULTS (whole registry vs answer key)")
-    print("=" * 50)
-    print(f"{'LENS':<18}{'PREC':>8}{'RECALL':>8}{'F1':>8}")
-    print("-" * 50)
+    c1_rows, c1_uni = evaluate_scope(flags, COHORT_1, COHORT_2)   # cohort 1 only
+    c2_rows, c2_uni = evaluate_scope(flags, COHORT_2, COHORT_1)   # cohort 2 only
+    cb_rows, cb_uni = evaluate_scope(flags, ANSWER_KEY, set())    # combined
+
+    print("F1 BY COHORT (current swarm, no recovery yet)")
+    print("=" * 58)
+    print(f"{'LENS':<18}{'COHORT 1':>12}{'COHORT 2':>12}{'COMBINED':>12}")
+    print("-" * 58)
     for name, _ in SWARM:
-        s = score(flags[name], ANSWER_KEY)
-        print(f"{name:<18}{s.precision:>8.2f}{s.recall:>8.2f}{s.f1:>8.2f}")
-    print("-" * 50)
-    uni = score(union_ensemble(flags), ANSWER_KEY)
-    print(f"{'ENSEMBLE (union)':<18}{uni.precision:>8.2f}{uni.recall:>8.2f}{uni.f1:>8.2f}")
-    print("=" * 50)
+        print(f"{name:<18}{c1_rows[name].f1:>12.2f}{c2_rows[name].f1:>12.2f}{cb_rows[name].f1:>12.2f}")
+    print("-" * 58)
+    print(f"{'ENSEMBLE (union)':<18}{c1_uni.f1:>12.2f}{c2_uni.f1:>12.2f}{cb_uni.f1:>12.2f}")
+    print("=" * 58)
 
 
 if __name__ == "__main__":
