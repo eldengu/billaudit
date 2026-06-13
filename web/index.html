@@ -252,6 +252,66 @@
   svg text { fill: var(--ink-faint); font-family: var(--mono); font-size: 12px; }
   svg text.val { fill: var(--spore); font-weight: 700; font-size: 13px; }
 
+  /* ---------- domain 2 / recovery chart ---------- */
+  .findings.three { grid-template-columns: repeat(3, 1fr); }
+  .legend { display: flex; gap: 26px; justify-content: center; margin-top: 14px; flex-wrap: wrap; font-size: 13px; color: var(--ink-soft); }
+  .legend .key { display: flex; align-items: center; gap: 9px; }
+  .legend .sw { width: 28px; height: 0; border-top: 3px solid; }
+  .legend .sw.b { border-color: var(--spore); }
+  .legend .sw.a { border-color: #7d8b84; border-top-style: dashed; }
+  svg .r-grid { stroke: rgba(255,255,255,.06); stroke-width: 1; }
+  svg .r-axis { stroke: rgba(255,255,255,.18); stroke-width: 1.2; }
+  svg .lineB { fill: none; stroke: var(--spore); stroke-width: 3.5; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 8px rgba(92,232,168,.45)); }
+  svg .lineA { fill: none; stroke: #7d8b84; stroke-width: 2.5; stroke-dasharray: 6 5; stroke-linejoin: round; stroke-linecap: round; }
+  svg .ptB { fill: #06120c; stroke: var(--spore); stroke-width: 3; }
+  svg .ptA { fill: #06120c; stroke: #7d8b84; stroke-width: 2.5; }
+  svg .adapt { stroke: var(--amber); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .85; }
+  svg text.valB { fill: var(--spore); font-weight: 700; font-size: 12.5px; }
+  svg text.adapt-lab { fill: var(--amber); font-size: 11px; opacity: 0; }
+  svg text.adapt-lab.show { opacity: 1; animation: poplabel .5s ease-out; }
+  @keyframes poplabel { 0% { opacity: 0; } 100% { opacity: 1; } }
+  svg .adapt.flash { animation: adaptflash .7s ease-out; }
+  @keyframes adaptflash { 0% { stroke-width: 6; opacity: 1; } 100% { stroke-width: 1.5; opacity: .85; } }
+  svg .rc-badge-bg { fill: rgba(92,232,168,.16); stroke: var(--spore); stroke-width: 1; }
+  svg text.rc-badge-tx { fill: var(--spore); font-family: var(--mono); font-size: 11.5px; font-weight: 700; }
+
+  /* recovery chart controls */
+  .rc-head { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .rc-counters { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-family: var(--mono); font-size: 13px; }
+  .rc-counter { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 10px; background: rgba(0,0,0,.25); border: 1px solid var(--line); color: var(--ink-soft); }
+  .rc-counter b { font-size: 15px; }
+  .rc-counter.b b { color: var(--spore); }
+  .rc-counter.a b { color: #9fb0a8; }
+  .rc-dot { width: 9px; height: 9px; border-radius: 50%; }
+  .rc-counter.b .rc-dot { background: var(--spore); box-shadow: 0 0 8px rgba(92,232,168,.6); }
+  .rc-counter.a .rc-dot { background: #7d8b84; }
+  .rc-round { color: var(--ink-faint); }
+  .rc-round b { color: var(--ink); }
+  .rc-btn {
+    font-family: var(--font); font-size: 13.5px; font-weight: 650; color: #06120c;
+    background: linear-gradient(135deg, var(--spore), var(--spore-2));
+    border: none; border-radius: 11px; padding: 9px 18px; cursor: pointer;
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .rc-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(92,232,168,.3); }
+  .rc-btn:active { transform: none; }
+
+  .takeaway {
+    margin-top: 40px; padding: 30px 32px; border-radius: 22px;
+    background: linear-gradient(160deg, var(--panel-2), rgba(10,22,17,.85));
+    border: 1px solid rgba(92,232,168,.22);
+  }
+  .takeaway h3 { font-size: 21px; font-weight: 700; margin-bottom: 12px; }
+  .takeaway p { font-size: 15.5px; color: var(--ink-soft); }
+  .takeaway p + p { margin-top: 12px; }
+  .takeaway b { color: var(--spore); font-weight: 650; }
+  .caveat {
+    margin-top: 18px; padding: 15px 18px; border-radius: 14px;
+    background: rgba(255,207,107,.08); border: 1px dashed rgba(255,207,107,.4);
+    font-size: 14px; color: var(--ink-soft);
+  }
+  .caveat b { color: var(--amber); font-weight: 650; }
+
   /* ---------- honest callout ---------- */
   .honest {
     margin-top: 46px;
@@ -304,6 +364,7 @@
 
   @media (max-width: 780px) {
     .findings { grid-template-columns: 1fr; }
+    .findings.three { grid-template-columns: 1fr; }
     .breakout { grid-template-columns: 1fr; padding: 28px; }
     .honest { padding: 30px; }
     section { padding: 54px 0; }
@@ -482,6 +543,103 @@
     </div>
   </section>
 
+  <!-- ===================== DOMAIN 2: SUPPLY CHAIN ===================== -->
+  <section id="domain2">
+    <div class="wrap reveal">
+      <div class="seclabel">Domain 2 · the same engine, harder</div>
+      <h2>Supply-chain anomaly detection <span style="color:var(--ink-faint);font-weight:500;">(synthetic)</span></h2>
+      <p class="lede">
+        The same engine, a harder problem: catch a hidden illicit network by its verifiable anomaly signals —
+        and keep catching it as the adversary adapts. Synthetic data, modeled on documented public typologies
+        (shared address/phone, shared officers, facade mismatch). <b>Surfaces leads, never verdicts.</b>
+      </p>
+
+      <!-- cat-and-mouse, 3 beats -->
+      <div class="findings three" style="margin-top:38px">
+        <div class="finding good">
+          <div class="step">BEAT 1 · CAUGHT</div>
+          <h3>The swarm catches the network</h3>
+          <p>Six lenses read the whole registry and flag a hidden network by its shared infrastructure —
+            the same registered address, the same phone, the same officers linking otherwise-unrelated shells.</p>
+        </div>
+        <div class="finding warn">
+          <div class="step">BEAT 2 · ADAPTS</div>
+          <h3>The adversary moves, the swarm craters</h3>
+          <p>A new cohort drops every shared signal — unique address and phone each, officers no longer shared —
+            and switches its facade to "home appliances". The lenses go blind.</p>
+          <span class="metric bad"><span class="v">0.76→0.27</span><span class="k">union F1 · cratered</span></span>
+        </div>
+        <div class="finding good">
+          <div class="step">BEAT 3 · INVARIANT</div>
+          <h3>But a deeper signal survives</h3>
+          <p>The disguise can't hide everything: all eight new shells still consign to the <em>same downstream
+            buyer</em>. The signal sits in the data — no current lens is looking at it.</p>
+        </div>
+      </div>
+
+      <!-- THE RECOVERY CHART (animated) -->
+      <div class="breakout" style="grid-template-columns:1fr; margin-top:36px;">
+        <div class="chartbox">
+          <div class="rc-head">
+            <div class="rc-counters">
+              <span class="rc-counter b"><span class="rc-dot"></span>Arm B&nbsp;<b id="rc-valB">0.00</b></span>
+              <span class="rc-counter a"><span class="rc-dot"></span>Arm A&nbsp;<b id="rc-valA">0.00</b></span>
+              <span class="rc-round">round&nbsp;<b id="rc-round">0</b></span>
+            </div>
+            <button id="rc-play" class="rc-btn" type="button">&#9654; Play</button>
+          </div>
+          <svg viewBox="0 0 520 320" id="recoverychart" width="100%" role="img"
+               aria-label="Recovery chart over six rounds. Arm A (exploit-only) stays flat at 0.55 after the adversary adapts at round 3; Arm B (diversity plus exploration) recovers to 1.0.">
+            <defs>
+              <linearGradient id="bfade" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="rgba(92,232,168,.30)"/>
+                <stop offset="100%" stop-color="rgba(92,232,168,0)"/>
+              </linearGradient>
+            </defs>
+            <g id="rc-grid"></g>
+            <g id="rc-adapt"></g>
+            <line class="r-axis" x1="60" y1="40" x2="60" y2="260" />
+            <line class="r-axis" x1="60" y1="260" x2="500" y2="260" />
+            <path id="rc-areaB" fill="url(#bfade)" d=""></path>
+            <path id="rc-lineA" class="lineA" d=""></path>
+            <path id="rc-lineB" class="lineB" d=""></path>
+            <g id="rc-pts"></g>
+            <g id="rc-badge"></g>
+            <g id="rc-xlab"></g>
+            <g id="rc-ylab"></g>
+            <text x="290" y="298" text-anchor="middle">round</text>
+            <text x="18" y="150" text-anchor="middle" transform="rotate(-90 18 150)">union F1</text>
+          </svg>
+          <div class="legend">
+            <span class="key"><span class="sw b"></span> Arm B — diversity + exploration</span>
+            <span class="key"><span class="sw a"></span> Arm A — exploit only</span>
+          </div>
+          <div class="chart-cap">union F1 across 6 rounds · adversary adapts at round 3</div>
+        </div>
+      </div>
+
+      <!-- what this shows -->
+      <div class="takeaway">
+        <h3>What this shows</h3>
+        <p>In a <b>non-stationary, adversarial</b> setting, diversity + exploration is what lets the swarm recover.
+          Arm A pruned itself to a single best lens — and a lens that only mutates copies of itself can never
+          rediscover a signal it discarded. After the adversary moved, it stayed flat at 0.55, permanently blind
+          to the new cohort.</p>
+        <p>Arm B kept a coverage-diverse ensemble <b>and</b> spent budget probing uncovered ground. Its exploration
+          regenerated a consignee lens, and selection adopted it <b>the moment it mattered</b> — when scoring the
+          combined network made that lens raise union F1. The recovery is <b>emergent, gated by scope</b>, not a
+          hardcoded schedule: the same lens was rejected in the earlier rounds because its hits fell outside the
+          active scope.</p>
+      </div>
+
+      <div class="caveat">
+        <b>Honest note.</b> The exploration <em>direction</em> is steered toward uncovered fields; the <em>timing</em>
+        of rediscovery is emergent. Synthetic data throughout — and the system surfaces <b>leads for analysts, not
+        verdicts</b>.
+      </div>
+    </div>
+  </section>
+
   <!-- ===================== FOOTER ===================== -->
   <footer>
     <div class="wrap">
@@ -553,6 +711,120 @@
   mt.setAttribute('x', xOf(MERGE_GEN)); mt.setAttribute('y', yOf(F1[MERGE_GEN]) + 26);
   mt.setAttribute('text-anchor','middle'); mt.setAttribute('fill','#ffcf6b');
   mt.textContent = '◆ merge selected'; pg.appendChild(mt);
+
+  // ---- recovery chart (domain 2): ANIMATED, two lines over 6 rounds ----
+  (function () {
+    const RA = [0.76, 0.86, 0.86, 0.55, 0.55, 0.55];  // Arm A — exploit only
+    const RB = [0.94, 0.94, 0.94, 0.64, 1.00, 1.00];  // Arm B — diversity + exploration
+    const ADAPT = 3, N = RA.length, DUR = 4500;
+    const NS = 'http://www.w3.org/2000/svg';
+    const mk = (tag, attrs, text) => {
+      const el = document.createElementNS(NS, tag);
+      for (const k in attrs) el.setAttribute(k, attrs[k]);
+      if (text != null) el.textContent = text;
+      return el;
+    };
+    const X0 = 60, X1 = 500, Y0 = 260, Y1 = 40, yMin = 0.40, yMax = 1.00;
+    const xOf = i => X0 + (X1 - X0) * (i / (N - 1));
+    const yOf = v => Y0 + (Y1 - Y0) * ((v - yMin) / (yMax - yMin));
+
+    const svg = document.getElementById('recoverychart');
+    if (!svg) return;
+    const $ = id => document.getElementById(id);
+    const grid = $('rc-grid'), ylab = $('rc-ylab'), xlab = $('rc-xlab'), adaptG = $('rc-adapt');
+    const lineAEl = $('rc-lineA'), lineBEl = $('rc-lineB'), areaBEl = $('rc-areaB');
+    const ptsG = $('rc-pts'), badgeG = $('rc-badge');
+    const valAEl = $('rc-valA'), valBEl = $('rc-valB'), roundEl = $('rc-round'), btn = $('rc-play');
+
+    // static layers (drawn once): gridlines, y/x axis labels
+    [0.5, 0.6, 0.7, 0.8, 0.9, 1.0].forEach(v => {
+      const y = yOf(v);
+      grid.appendChild(mk('line', { class: 'r-grid', x1: X0, x2: X1, y1: y, y2: y }));
+      ylab.appendChild(mk('text', { class: 'r-lab', x: X0 - 10, y: y + 4, 'text-anchor': 'end' }, v.toFixed(1)));
+    });
+    RA.forEach((_, i) => xlab.appendChild(mk('text', { x: xOf(i), y: Y0 + 22, 'text-anchor': 'middle' }, i)));
+
+    // adversary-adapts marker, hidden until round 3
+    const ax = xOf(ADAPT);
+    const adaptLine = mk('line', { class: 'adapt', x1: ax, y1: Y1 - 6, x2: ax, y2: Y0 });
+    const adaptLab = mk('text', { class: 'adapt-lab', x: ax + 6, y: Y1 + 2 }, 'adversary adapts');
+    adaptG.appendChild(adaptLine); adaptG.appendChild(adaptLab);
+    adaptG.style.opacity = '0';
+
+    const valAt = (arr, p) => { const i = Math.floor(p); return i >= N - 1 ? arr[N - 1] : arr[i] + (arr[i + 1] - arr[i]) * (p - i); };
+    const ptsUpTo = (arr, p) => {
+      const k = Math.floor(p + 1e-9), out = [];
+      for (let i = 0; i <= Math.min(k, N - 1); i++) out.push([xOf(i), yOf(arr[i])]);
+      if (k < N - 1 && p > k) {
+        const f = p - k;
+        out.push([xOf(k) + (xOf(k + 1) - xOf(k)) * f, yOf(arr[k]) + (yOf(arr[k + 1]) - yOf(arr[k])) * f]);
+      }
+      return out;
+    };
+    const dOf = pts => pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+
+    function render(p) {
+      const ptsA = ptsUpTo(RA, p), ptsB = ptsUpTo(RB, p);
+      lineAEl.setAttribute('d', dOf(ptsA));
+      lineBEl.setAttribute('d', dOf(ptsB));
+      areaBEl.setAttribute('d', ptsB.length > 1
+        ? dOf(ptsB) + ` L ${ptsB[ptsB.length - 1][0].toFixed(1)} ${Y0} L ${X0} ${Y0} Z` : '');
+      ptsG.textContent = '';
+      const k = Math.floor(p + 1e-9);
+      for (let i = 0; i <= Math.min(k, N - 1); i++) {
+        ptsG.appendChild(mk('circle', { class: 'ptA', cx: xOf(i), cy: yOf(RA[i]), r: 4 }));
+        ptsG.appendChild(mk('circle', { class: 'ptB', cx: xOf(i), cy: yOf(RB[i]), r: 5 }));
+        ptsG.appendChild(mk('text', { class: 'valB', x: xOf(i), y: yOf(RB[i]) - 12, 'text-anchor': 'middle' }, RB[i].toFixed(2)));
+      }
+      valAEl.textContent = valAt(RA, p).toFixed(2);
+      valBEl.textContent = valAt(RB, p).toFixed(2);
+      roundEl.textContent = Math.min(N - 1, Math.floor(p + 1e-9));
+      adaptG.style.opacity = (p >= ADAPT) ? '1' : '0';
+    }
+
+    function addBadge() {
+      badgeG.textContent = '';
+      const bx = xOf(N - 1), by = yOf(RB[N - 1]);
+      const g = mk('g', { transform: `translate(${bx - 100} ${by - 30})` });
+      g.appendChild(mk('rect', { class: 'rc-badge-bg', x: 0, y: 0, width: 96, height: 20, rx: 10 }));
+      g.appendChild(mk('text', { class: 'rc-badge-tx', x: 48, y: 14, 'text-anchor': 'middle' }, '✓ recovered'));
+      badgeG.appendChild(g);
+    }
+
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let raf = null, crossed = false;
+
+    function play() {
+      if (raf) cancelAnimationFrame(raf);
+      crossed = false;
+      badgeG.textContent = '';
+      adaptLab.classList.remove('show'); adaptLine.classList.remove('flash');
+      btn.innerHTML = '↻ Replay';
+      if (reduce) { render(N - 1); adaptLab.classList.add('show'); addBadge(); return; }
+      render(0);
+      const t0 = performance.now();
+      (function frame(now) {
+        const prog = Math.min(1, (now - t0) / DUR), p = prog * (N - 1);
+        render(p);
+        if (!crossed && p >= ADAPT) { crossed = true; adaptLine.classList.add('flash'); adaptLab.classList.add('show'); }
+        if (prog < 1) { raf = requestAnimationFrame(frame); }
+        else { render(N - 1); addBadge(); raf = null; }
+      })(t0);
+    }
+
+    btn.addEventListener('click', play);
+    if (reduce) { render(N - 1); adaptLab.classList.add('show'); addBadge(); }
+    else { render(0); }
+
+    // auto-play once on scroll into view
+    let played = false;
+    const io = new IntersectionObserver(es => {
+      es.forEach(e => {
+        if (e.isIntersecting && !played) { played = true; if (!reduce) play(); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.4 });
+    io.observe(svg);
+  })();
 
   // ---- scroll reveal ----
   const io = new IntersectionObserver(es => {
