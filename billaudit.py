@@ -98,17 +98,16 @@ ANSWER_KEY: set[int] = {3, 7, 9, 11, 15, 19, 21, 23, 27, 31}
 
 
 # ---------------------------------------------------------------------------
-# 2. Train / held-out split (~60/40), each keeping a mix of error + correct
+# 2. Validation / test split (three-way discipline)
 # ---------------------------------------------------------------------------
 #
-# 35 lines -> 20 train / 15 held-out. Errors split so neither side is all-error
-# or all-correct:  train errors {3,7,9,11,15,19} (6) ; held-out {21,23,27,31} (4).
-# (Kept for the evolution step; the swarm table below evaluates the WHOLE bill.)
-TRAIN_IDS:    set[int] = set(range(1, 21))    # ids 1-20
-HELDOUT_IDS:  set[int] = set(range(21, 36))   # ids 21-35
-
-TRAIN   = [li for li in BILL if li.id in TRAIN_IDS]
-HELDOUT = [li for li in BILL if li.id in HELDOUT_IDS]
+# Detectors always see the WHOLE bill (so cross-line context works); a "split"
+# here just means which line ids count toward a given score.
+#   VALIDATION (ids 1-20)  -> the ONLY selection signal during evolution
+#   TEST       (ids 21-35) -> scored exactly ONCE, at the very end
+# Errors per split: validation {3,7,9,11,15,19} (6) ; test {21,23,27,31} (4).
+VALIDATION_IDS: set[int] = set(range(1, 21))    # ids 1-20
+TEST_IDS:       set[int] = set(range(21, 36))   # ids 21-35
 
 
 # ---------------------------------------------------------------------------
@@ -304,10 +303,13 @@ def mutate_prompt(system_prompt: str) -> str:
 
     client = OpenAI()
     meta = (
-        "Below is a SYSTEM PROMPT that tells an assistant how to judge whether a "
-        "single medical-bill line item is a billing error (it must answer YES or NO).\n"
+        "Below is a SYSTEM PROMPT giving an assistant a strategy for auditing a "
+        "WHOLE medical bill: it is shown every line item and returns a "
+        "comma-separated list of the ids that are billing errors.\n"
         "Rewrite it into an improved VARIANT that catches billing errors more "
-        "reliably while staying concise and still demanding a one-word YES/NO answer.\n"
+        "reliably while staying concise. Keep it a strategy/lens description for "
+        "reviewing the whole bill; do NOT change the output format and do NOT tell "
+        "it to answer YES/NO.\n"
         "Return ONLY the rewritten system prompt, with no preamble or quotes.\n\n"
         f"SYSTEM PROMPT:\n{system_prompt}"
     )
@@ -321,33 +323,36 @@ def mutate_prompt(system_prompt: str) -> str:
 
 
 def evolve(initial_prompts: dict[str, str],
-           generations: int = 3, keep: int = 2, pop_size: int = 5) -> None:
-    """Selection + mutation, using HELD-OUT F1 as the sole fitness signal.
+           generations: int = 4, keep: int = 2, pop_size: int = 5) -> None:
+    """Selection + mutation, using VALIDATION F1 as the sole fitness signal.
 
-    Each generation: score the population on held-out, keep the top `keep`
-    (elitism), and refill back to `pop_size` with mutated children of the
-    survivors. Prints the best-detector and union held-out F1 per generation.
+    Detectors always see the whole bill; only the VALIDATION ids (1-20) count
+    toward fitness. Each generation: score the population on validation F1, keep
+    the top `keep` (elitism), and refill to `pop_size` with mutated children.
+    Prints best + union validation F1 per generation, then scores the final
+    population's union ensemble on the TEST ids (21-35) exactly ONCE at the end.
     """
     population = list(initial_prompts.items())  # [(name, system_prompt)]
-    heldout_truth = ANSWER_KEY & HELDOUT_IDS
+    val_truth = ANSWER_KEY & VALIDATION_IDS
 
-    print("\nEVOLUTION (selection + mutation; held-out F1 = sole fitness signal)")
-    print("=" * 52)
-    print(f"{'GEN':<6}{'POP':>5}{'BEST DETECTOR F1':>20}{'UNION F1':>12}")
-    print("-" * 52)
+    print("\nEVOLUTION (select on VALIDATION ids 1-20; TEST ids 21-35 scored once at end)")
+    print("=" * 56)
+    print(f"{'GEN':<5}{'POP':>5}{'BEST VAL F1':>14}{'UNION VAL F1':>16}")
+    print("-" * 56)
 
+    flags: dict[str, set[int]] = {}
     for gen in range(generations):
         prompt_by_name = dict(population)
         swarm = [(name, make_openai_detector(p)) for name, p in population]
-        flags = run_swarm(swarm, HELDOUT)
+        flags = run_swarm(swarm, BILL)  # whole bill seen; scored on a subset below
 
         scored = sorted(
-            ((score(flags[name], heldout_truth).f1, name) for name, _ in swarm),
+            ((score(flags[name] & VALIDATION_IDS, val_truth).f1, name) for name, _ in swarm),
             reverse=True,
         )
-        union_f1 = score(union_ensemble(flags, HELDOUT), heldout_truth).f1
+        union_val = score(union_ensemble(flags, BILL) & VALIDATION_IDS, val_truth).f1
         best_f1, best_name = scored[0]
-        print(f"{gen:<6}{len(population):>5}{best_f1:>20.2f}{union_f1:>12.2f}"
+        print(f"{gen:<5}{len(population):>5}{best_f1:>14.2f}{union_val:>16.2f}"
               f"   (best: {best_name})")
 
         # No point mutating after the final generation's score is recorded.
@@ -366,7 +371,12 @@ def evolve(initial_prompts: dict[str, str],
 
         population = survivors + children
 
-    print("=" * 52)
+    print("-" * 56)
+    # TEST scored exactly ONCE, here, from the final generation's flags.
+    test_truth = ANSWER_KEY & TEST_IDS
+    union_test = score(union_ensemble(flags, BILL) & TEST_IDS, test_truth).f1
+    print(f"FINAL  union TEST F1 (scored once): {union_test:.2f}")
+    print("=" * 56)
 
 
 def main() -> None:
@@ -395,9 +405,8 @@ def main() -> None:
     print(f"{'ENSEMBLE (union/any)':<24}{uni.precision:>8.2f}{uni.recall:>8.2f}{uni.f1:>8.2f}")
     print("=" * 48)
 
-    # Evolution is paused for this milestone (substrate change only). The evolve()
-    # function and the train/held-out split below remain ready for the next step.
-    # evolve(SYSTEM_PROMPTS, generations=3, keep=2, pop_size=5)
+    # Evolve: select on validation F1 over 4 generations, score test once at end.
+    evolve(SYSTEM_PROMPTS, generations=4, keep=2, pop_size=5)
 
 
 if __name__ == "__main__":
