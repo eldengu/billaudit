@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoSwarm — pitch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0a100e; --ink-2:#0d1612; --panel:#11201a; --line:#203a2e;
+    --bone:#e7efe9; --muted:#7f948b; --faint:#566860;
+    --spore:#5fe3ad; --spore-dim:#2c6b53;
+    --amber:#f0a94e; --amber-dim:#6e4f2b;
+    --display:'Space Grotesk',system-ui,sans-serif;
+    --body:'Inter',system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--ink); color:var(--bone); font-family:var(--body);
+    overflow:hidden; -webkit-font-smoothing:antialiased; cursor:default;
+  }
+  /* ambient swarm */
+  #swarm{position:fixed; inset:0; z-index:0; opacity:.5; pointer-events:none}
+
+  #deck{position:fixed; inset:0; z-index:1}
+  .slide{
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    justify-content:center; padding:6.5vmin 9vmin 8vmin;
+    opacity:0; visibility:hidden; transform:translateY(14px);
+    transition:opacity .5s ease, transform .5s ease;
+  }
+  .slide.active{opacity:1; visibility:visible; transform:none}
+
+  .eyebrow{
+    font-family:var(--mono); font-size:13px; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--spore); margin-bottom:3vmin;
+    display:flex; gap:14px; align-items:center;
+  }
+  .eyebrow .num{color:var(--faint)}
+  .eyebrow .t{color:var(--muted)}
+  .eyebrow.warm{color:var(--amber)}
+
+  h1{font-family:var(--display); font-weight:700; line-height:1.02; letter-spacing:-.02em}
+  .lead{font-size:clamp(34px,6.6vmin,82px)}
+  .mega{font-size:clamp(48px,11vmin,150px); line-height:.92}
+  .sub{font-family:var(--body); color:var(--muted); font-weight:400;
+       font-size:clamp(17px,2.4vmin,26px); margin-top:3vmin; max-width:46ch; line-height:1.5}
+  .kicker{margin-top:auto; padding-top:4vmin; color:var(--muted);
+          font-size:clamp(15px,2vmin,21px); line-height:1.5; max-width:60ch}
+  .kicker b{color:var(--bone); font-weight:600}
+
+  /* title */
+  .brandmark{display:flex; align-items:center; gap:16px; margin-bottom:5vmin}
+  .brandmark .dot{width:13px;height:13px;border-radius:50%;
+    background:var(--spore); box-shadow:0 0 22px var(--spore); animation:pulse 2.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.55;transform:scale(.82)}50%{opacity:1;transform:scale(1.12)}}
+  .brandmark span{font-family:var(--mono); letter-spacing:.34em; text-transform:uppercase;
+    font-size:15px; color:var(--bone)}
+  .title-foot{margin-top:5vmin; font-family:var(--mono); font-size:13px;
+    color:var(--faint); letter-spacing:.05em}
+  .title-foot b{color:var(--muted); font-weight:500}
+
+  /* contrast pair (problem) */
+  .pair{display:grid; grid-template-columns:1fr 1fr; gap:3vmin; margin-top:5vmin; max-width:90%}
+  .card{border:1px solid var(--line); border-radius:14px; padding:3.4vmin 3vmin;
+        background:linear-gradient(180deg,var(--panel),transparent)}
+  .card .tag{font-family:var(--mono); font-size:12px; letter-spacing:.16em;
+        text-transform:uppercase; color:var(--faint); margin-bottom:1.4vmin}
+  .card .big{font-family:var(--display); font-weight:600; font-size:clamp(20px,3.1vmin,32px); line-height:1.12}
+  .card.medical{border-color:var(--spore-dim)} .card.medical .tag{color:var(--spore)}
+  .card.supply{border-color:var(--amber-dim)} .card.supply .tag{color:var(--amber)}
+
+  /* chips (idea) */
+  .chips{display:flex; flex-wrap:wrap; gap:14px; margin-top:4.5vmin}
+  .chip{font-family:var(--mono); font-size:clamp(13px,1.7vmin,17px); color:var(--bone);
+    border:1px solid var(--line); border-radius:999px; padding:11px 18px; background:var(--ink-2)}
+  .chip .x{color:var(--spore); margin-right:9px}
+
+  /* typed sequence (medical) */
+  .seq{margin-top:4vmin; display:flex; flex-direction:column; gap:0}
+  .step{display:grid; grid-template-columns:auto 1fr; gap:18px; align-items:baseline;
+    padding:1.5vmin 0; border-top:1px solid var(--line)}
+  .step:first-child{border-top:none}
+  .step .what{font-family:var(--mono); font-size:clamp(13px,1.7vmin,18px); color:var(--muted); white-space:nowrap}
+  .step .res{font-family:var(--display); font-weight:500; font-size:clamp(16px,2.4vmin,26px); color:var(--bone)}
+  .step.win .res{color:var(--spore)}
+  .step .res em{font-style:normal; font-family:var(--mono); color:var(--spore)}
+
+  .honest{margin-top:3.4vmin; border:1px solid var(--amber-dim);
+    border-left:3px solid var(--amber); border-radius:10px; padding:2.4vmin 2.8vmin;
+    background:linear-gradient(180deg,rgba(240,169,78,.07),transparent)}
+  .honest .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--amber); margin-bottom:1vmin}
+  .honest .txt{font-size:clamp(16px,2.2vmin,24px); line-height:1.4}
+  .honest .txt b{color:var(--bone)} .honest .txt .v{font-family:var(--mono); color:var(--amber)}
+
+  /* domain split + animated bill */
+  .dom{display:grid; grid-template-columns:1fr .9fr; gap:5vmin; align-items:start; margin-top:2.6vmin}
+  .dom .seq{margin-top:0}
+  .dom .step{padding:1.05vmin 0}
+  .dom .step .res{font-size:clamp(15px,2.1vmin,23px)}
+  .dom .honest{margin-top:2.4vmin}
+  .billviz{border:1px solid var(--line); border-radius:14px; overflow:hidden;
+    background:linear-gradient(180deg,var(--panel),transparent)}
+  .bill-head{font-family:var(--mono); font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--muted); padding:13px 18px; border-bottom:1px solid var(--line)}
+  .bill-head .scanlbl{color:var(--spore)}
+  .bill-body{position:relative; padding:5px 0}
+  .brow{display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center;
+    font-family:var(--mono); font-size:clamp(11px,1.45vmin,15px); padding:8px 18px; color:var(--muted);
+    border-left:3px solid transparent; transition:background .3s,color .3s,border-color .3s}
+  .brow .c{color:var(--faint)} .brow .a{color:var(--bone); justify-self:end}
+  .brow.flagged{background:rgba(240,169,78,.09); border-left-color:var(--amber); color:var(--bone); animation:flagpop .5s ease}
+  .brow.flagged .a{color:var(--amber); font-weight:700}
+  .brow.flagged .d::after{content:" ⚑"; color:var(--amber)}
+  .scan{position:absolute; left:0; right:0; top:-46px; height:46px; opacity:0; pointer-events:none;
+    background:linear-gradient(180deg,transparent,rgba(95,227,173,.28),transparent);
+    border-top:1px solid rgba(95,227,173,.7); border-bottom:1px solid rgba(95,227,173,.7)}
+  .scan.sweep{animation:billsweep 2.4s linear forwards}
+  @keyframes billsweep{0%{top:-46px;opacity:0}8%{opacity:1}92%{opacity:1}100%{top:100%;opacity:0}}
+  @keyframes flagpop{0%{background:rgba(240,169,78,.42)}100%{background:rgba(240,169,78,.09)}}
+  .bill-foot{padding:12px 18px; border-top:1px solid var(--line); font-family:var(--mono);
+    font-size:13px; color:var(--faint)}
+  .bill-foot #caught.done{color:var(--spore)}
+
+  /* recovery slide */
+  .climax{display:grid; grid-template-columns:1.15fr 1fr; gap:5vmin; align-items:center; margin-top:3vmin}
+  .climax-left .sub{margin-top:2.4vmin}
+  .mathline{font-family:var(--display); font-weight:600; line-height:1.08;
+    font-size:clamp(24px,4vmin,46px); margin-top:4vmin}
+  .mathline .hl{color:var(--spore)}
+  .chartwrap{border:1px solid var(--line); border-radius:14px; padding:2.4vmin;
+    background:linear-gradient(180deg,var(--panel),transparent)}
+  .legend{display:flex; gap:20px; font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:1.4vmin; flex-wrap:wrap}
+  .legend i{display:inline-block;width:18px;height:3px;border-radius:2px;margin-right:7px;vertical-align:middle}
+
+  .netwrap{margin-bottom:1.6vmin; border-bottom:1px solid var(--line); padding-bottom:1.3vmin}
+  .net{display:block; width:100%; max-height:15vh; height:auto}
+  #curve{max-height:40vh}
+  .net .gedge,.net .glabel{opacity:1; transition:opacity .8s ease}
+  .net .aedge,.net .ahub,.net .alabel,.net .nring{opacity:0; transition:opacity .8s ease}
+  .net.b .gedge,.net.b .glabel{opacity:0}
+  .net.b .aedge,.net.b .ahub,.net.b .alabel,.net.b .nring{opacity:1}
+
+  /* inngest flow */
+  .flow{display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-top:5vmin}
+  .node{font-family:var(--mono); font-size:clamp(13px,1.9vmin,19px); color:var(--bone);
+    border:1px solid var(--line); border-radius:10px; padding:13px 18px; background:var(--ink-2)}
+  .node.drop{border-color:var(--amber-dim); color:var(--amber)}
+  .node.rec{border-color:var(--spore-dim); color:var(--spore)}
+  .arrow{color:var(--faint); font-family:var(--mono); font-size:18px}
+
+  /* swarm vs one comparison */
+  .cmp{display:grid; grid-template-columns:1fr auto 1fr; gap:3vmin; align-items:center; margin-top:3vmin}
+  .cmp-col{text-align:center}
+  .cmp-title{font-family:var(--mono); font-size:clamp(13px,1.7vmin,17px); color:var(--muted);
+    margin-bottom:1.3vmin; letter-spacing:.06em}
+  .cmp-title.hi{color:var(--spore)}
+  .cmpsvg{width:100%; max-height:40vh; height:auto; border:1px solid var(--line); border-radius:14px;
+    background:linear-gradient(180deg,var(--panel),transparent)}
+  .cmp-vs{font-family:var(--display); font-weight:700; color:var(--faint); font-size:clamp(18px,2.6vmin,30px)}
+  .cmp-sub{font-family:var(--mono); font-size:clamp(11px,1.45vmin,15px); color:var(--faint);
+    margin-top:1.3vmin; opacity:0; transition:opacity .5s ease}
+  .cmp-sub.show{opacity:1}
+  .cmp-sub.hi.show{color:var(--spore)}
+  .dot{fill:#26352e; transition:fill .4s ease}
+  .dot.lit{fill:#5fe3ad; filter:drop-shadow(0 0 4px rgba(95,227,173,.55))}
+  .agentR{opacity:0; transition:opacity .5s ease}
+  .halo{animation:halopulse 2.4s ease-in-out infinite}
+  @keyframes halopulse{0%,100%{opacity:.55}50%{opacity:1}}
+  @media (max-width:760px){.cmp{grid-template-columns:1fr; gap:2vmin}.cmp-vs{display:none}}
+
+  /* chrome */
+  #bar{position:fixed; left:0; top:0; height:2px; background:var(--spore);
+    box-shadow:0 0 12px var(--spore); width:0; z-index:5; transition:width .45s ease}
+  #counter{position:fixed; bottom:18px; right:24px; z-index:5; font-family:var(--mono);
+    font-size:12px; color:var(--faint); letter-spacing:.1em}
+  #counter b{color:var(--muted); font-weight:500}
+  #hint{position:fixed; bottom:18px; left:24px; z-index:5; font-family:var(--mono);
+    font-size:11px; color:var(--faint); letter-spacing:.06em}
+  #hint kbd{color:var(--muted); border:1px solid var(--line); border-radius:4px; padding:1px 6px; margin:0 1px}
+  #back{position:fixed; bottom:14px; left:50%; transform:translateX(-50%); z-index:6;
+    background:none; border:1px solid var(--line); color:var(--muted); border-radius:8px;
+    font-family:var(--mono); font-size:12px; padding:7px 14px; cursor:pointer; opacity:.5}
+  #back:hover{opacity:1; color:var(--bone)}
+
+  #notes{position:fixed; left:0; right:0; bottom:0; z-index:7; padding:18px 9vmin 22px;
+    background:linear-gradient(180deg,transparent,rgba(7,12,10,.97)32%);
+    color:var(--bone); font-size:clamp(15px,2vmin,20px); line-height:1.5;
+    display:none; max-height:42vh; overflow:auto}
+  #notes.on{display:block}
+  #notes .nlbl{font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--spore); margin-bottom:8px}
+
+  @media (max-width:760px){
+    .pair,.climax{grid-template-columns:1fr}
+    .slide{padding:8vmin 7vmin}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .brandmark .dot{animation:none}
+    .slide{transition:opacity .2s}
+  }
+</style>
+</head>
+<body>
+<canvas id="swarm"></canvas>
+<div id="bar"></div>
+
+<div id="deck">
+
+  <!-- 1 TITLE -->
+  <section class="slide active" data-notes="(Title up as you walk on.) Take a breath. Then go.">
+    <div class="brandmark"><span class="dot"></span><span>AutoSwarm</span></div>
+    <h1 class="lead">Ungameable verification<br>that evolves with the threat.</h1>
+    <div class="sub">A self-evolving swarm of AI auditors.</div>
+    <div class="title-foot">Autonomous Healthcare Hackathon · <b>Elden Gu</b></div>
+  </section>
+
+  <!-- 2 PROBLEM -->
+  <section class="slide" data-notes="AI now writes the documents, the analyses, the decisions — and almost none of it gets verified. In healthcare, that's a $450 charge for a $15 blood draw. Or a fentanyl-precursor shipment that slips through, disguised as a textile order. The usual fix is a fixed inspector — a set of rules. But a fixed inspector gets memorized and bypassed. The adversary adapts; the inspector doesn't.">
+    <div class="eyebrow"><span class="num">01</span><span class="t">The problem</span></div>
+    <h1 class="lead">AI writes everything.<br>Almost nothing gets verified.</h1>
+    <div class="pair">
+      <div class="card medical"><div class="tag">Healthcare billing</div><div class="big">$450 charged for a $15 blood draw</div></div>
+      <div class="card supply"><div class="tag">Supply chain</div><div class="big">A fentanyl shipment, disguised as textiles</div></div>
+    </div>
+    <div class="kicker">A fixed inspector gets memorized and bypassed. <b>The adversary adapts — the inspector doesn't.</b></div>
+  </section>
+
+  <!-- 3 IDEA -->
+  <section class="slide" data-notes="AutoSwarm is a swarm of AI auditors that evolves. The key idea: it's ungameable — because we plant the errors and hold the answer key. The detectors can't talk their way to a score. We use F1, so 'flag everything' loses. And we score the held-out test exactly once. No reward-hacking.">
+    <div class="eyebrow"><span class="num">02</span><span class="t">The idea</span></div>
+    <h1 class="lead">A swarm of AI auditors<br>that <span style="color:var(--spore)">evolves</span>.</h1>
+    <div class="sub">Ungameable — because <b style="color:var(--bone);font-weight:600">we plant the errors and hold the answer key.</b> The detectors can't talk their way to a score.</div>
+    <div class="chips">
+      <div class="chip"><span class="x">→</span>F1, so "flag everything" loses</div>
+      <div class="chip"><span class="x">→</span>Held-out test scored once</div>
+      <div class="chip"><span class="x">→</span>No reward-hacking</div>
+    </div>
+  </section>
+
+  <!-- 3b SWARM vs ONE -->
+  <section class="slide" data-notes="Why a team, and not one checker? One checker can evolve. But it keeps one shape — it leaves blind spots. A swarm evolves in many directions. Together, they cover what one alone cannot.">
+    <div class="eyebrow"><span class="num">03</span><span class="t">Why a swarm</span></div>
+    <h1 class="lead" style="font-size:clamp(28px,4.8vmin,56px)">One checker — or a team?</h1>
+    <div class="cmp" id="cmp">
+      <div class="cmp-col">
+        <div class="cmp-title">One agent, evolving</div>
+        <svg class="cmpsvg" id="cmpL" viewBox="0 0 300 210" width="100%" preserveAspectRatio="xMidYMid meet">
+          <circle class="dot" cx="45" cy="60" r="5"/><circle class="dot" cx="100" cy="60" r="5"/><circle class="dot" cx="155" cy="60" r="5"/><circle class="dot" cx="210" cy="60" r="5"/><circle class="dot" cx="265" cy="60" r="5"/>
+          <circle class="dot" cx="45" cy="115" r="5"/><circle class="dot" cx="100" cy="115" r="5"/><circle class="dot" cx="155" cy="115" r="5"/><circle class="dot" cx="210" cy="115" r="5"/><circle class="dot" cx="265" cy="115" r="5"/>
+          <circle class="dot" cx="45" cy="170" r="5"/><circle class="dot" cx="100" cy="170" r="5"/><circle class="dot" cx="155" cy="170" r="5"/><circle class="dot" cx="210" cy="170" r="5"/><circle class="dot" cx="265" cy="170" r="5"/>
+          <g id="agentL" transform="translate(155,115)"><circle class="halo" r="34" fill="rgba(95,227,173,.12)"/><circle r="9" fill="#5fe3ad"/></g>
+        </svg>
+        <div class="cmp-sub" id="subL">evolves · but one shape · blind spots remain</div>
+      </div>
+      <div class="cmp-vs">vs</div>
+      <div class="cmp-col">
+        <div class="cmp-title hi">A swarm, evolving</div>
+        <svg class="cmpsvg" id="cmpR" viewBox="0 0 300 210" width="100%" preserveAspectRatio="xMidYMid meet">
+          <circle class="dot" cx="45" cy="60" r="5"/><circle class="dot" cx="100" cy="60" r="5"/><circle class="dot" cx="155" cy="60" r="5"/><circle class="dot" cx="210" cy="60" r="5"/><circle class="dot" cx="265" cy="60" r="5"/>
+          <circle class="dot" cx="45" cy="115" r="5"/><circle class="dot" cx="100" cy="115" r="5"/><circle class="dot" cx="155" cy="115" r="5"/><circle class="dot" cx="210" cy="115" r="5"/><circle class="dot" cx="265" cy="115" r="5"/>
+          <circle class="dot" cx="45" cy="170" r="5"/><circle class="dot" cx="100" cy="170" r="5"/><circle class="dot" cx="155" cy="170" r="5"/><circle class="dot" cx="210" cy="170" r="5"/><circle class="dot" cx="265" cy="170" r="5"/>
+          <g class="agentR" transform="translate(72,75)"><circle class="halo" r="26" fill="rgba(95,227,173,.12)"/><circle r="7" fill="#5fe3ad"/></g>
+          <g class="agentR" transform="translate(238,75)"><circle class="halo" r="26" fill="rgba(95,227,173,.12)"/><circle r="7" fill="#5fe3ad"/></g>
+          <g class="agentR" transform="translate(155,115)"><circle class="halo" r="24" fill="rgba(95,227,173,.12)"/><circle r="7" fill="#5fe3ad"/></g>
+          <g class="agentR" transform="translate(72,165)"><circle class="halo" r="24" fill="rgba(95,227,173,.12)"/><circle r="7" fill="#5fe3ad"/></g>
+          <g class="agentR" transform="translate(238,165)"><circle class="halo" r="24" fill="rgba(95,227,173,.12)"/><circle r="7" fill="#5fe3ad"/></g>
+        </svg>
+        <div class="cmp-sub hi" id="subR">many shapes · coverage emerges</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 MEDICAL -->
+  <section class="slide" data-notes="Domain one: medical bills. We plant errors; the swarm hunts them. The interesting part is what failed. One detector alone missed the subtle errors — so we used many. But majority voting buried the one specialist who caught the rare error. Union fixed that. Then greedy selection threw away the low-scoring-but-unique specialists, and the ensemble collapsed. Only when we selected for coverage — and let detectors merge — did it finally climb: 0.82 to 0.87. And here's the honest part: validation 0.87, test 0.62. A real generalization gap — exposed on purpose, by scoring the test only once.">
+    <div class="eyebrow"><span class="num">04</span><span class="t">Domain 1 · medical bills — what failed</span></div>
+    <h1 class="lead" style="font-size:clamp(26px,4.4vmin,50px)">The interesting part is what <span style="color:var(--amber)">failed</span>.</h1>
+    <div class="dom">
+      <div class="dom-left">
+        <div class="seq">
+          <div class="step"><div class="what">one detector</div><div class="res">misses the subtle errors</div></div>
+          <div class="step"><div class="what">majority vote</div><div class="res">buries the lone specialist <em>0.00</em></div></div>
+          <div class="step"><div class="what">union</div><div class="res">recovers it</div></div>
+          <div class="step"><div class="what">greedy selection</div><div class="res">collapses — discards unique specialists</div></div>
+          <div class="step win"><div class="what">coverage + merge</div><div class="res">finally climbs <em>0.82 → 0.87</em></div></div>
+        </div>
+        <div class="honest">
+          <div class="lbl">The honest part</div>
+          <div class="txt">Validation <span class="v">0.87</span> · Test <span class="v">0.62</span> — a real gap, <b>exposed on purpose.</b></div>
+        </div>
+      </div>
+      <div class="dom-right">
+        <div class="billviz" id="billviz">
+          <div class="bill-head">Patient bill<span class="scanlbl"> · auditing</span></div>
+          <div class="bill-body">
+            <div class="brow"><span class="c">99213</span><span class="d">Office visit</span><span class="a">$120</span></div>
+            <div class="brow err"><span class="c">85025</span><span class="d">Blood draw</span><span class="a">$450</span></div>
+            <div class="brow"><span class="c">80053</span><span class="d">Metabolic panel</span><span class="a">$95</span></div>
+            <div class="brow err"><span class="c">70553</span><span class="d">Brain MRI</span><span class="a">$1,200</span></div>
+            <div class="brow"><span class="c">36415</span><span class="d">Venipuncture</span><span class="a">$15</span></div>
+            <div class="brow err"><span class="c">99213</span><span class="d">Office visit · dup</span><span class="a">$120</span></div>
+            <div class="brow"><span class="c">90837</span><span class="d">Therapy 60m</span><span class="a">$180</span></div>
+            <div class="scan" id="scan"></div>
+          </div>
+          <div class="bill-foot"><span id="caught">auditing…</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 RECOVERY (climax) -->
+  <section class="slide" data-notes="Same engine, harder problem. A synthetic supply chain, modeled on the real anomaly signals FinCEN and C4ADS document — shared addresses, shared officers, fake industry facades. The swarm catches the network. Then the adversary adapts: new shells drop those signals, switch their cover to home appliances — and the swarm craters. But a deeper signal survives: they all ship to one buyer. Watch the two strategies. The greedy swarm stays flat — it threw away the diversity it needed. The diverse swarm recovers — its exploration rediscovers the surviving signal. That's the math: against a moving adversary, diversity is insurance.">
+    <div class="eyebrow"><span class="num">05</span><span class="t">An adapting adversary</span></div>
+    <div class="climax">
+      <div class="climax-left">
+        <h1 class="lead" style="font-size:clamp(30px,5.4vmin,62px)">Same engine.<br>Harder problem.</h1>
+        <div class="sub">Synthetic supply chain, modeled on the anomaly signals <b style="color:var(--bone);font-weight:600">FinCEN &amp; C4ADS</b> document — shared addresses, shared officers, fake facades. The adversary adapts, the swarm craters — but one signal survives.</div>
+        <div class="mathline">Against a moving adversary,<br><span class="hl">diversity is insurance.</span></div>
+      </div>
+      <div class="chartwrap">
+        <div class="netwrap">
+          <svg id="net" class="net" viewBox="0 0 360 116" width="100%" preserveAspectRatio="xMidYMid meet" aria-label="supply chain rewiring">
+            <g class="gedge" stroke="#5fe3ad" stroke-width="1.6">
+              <line x1="60" y1="54" x2="112" y2="38"/><line x1="112" y1="38" x2="150" y2="70"/>
+              <line x1="96" y1="88" x2="150" y2="70"/><line x1="60" y1="54" x2="96" y2="88"/>
+            </g>
+            <g class="aedge" stroke="#f0a94e" stroke-width="1.5" stroke-dasharray="3 4">
+              <line x1="60" y1="54" x2="300" y2="62"/><line x1="112" y1="38" x2="300" y2="62"/>
+              <line x1="150" y1="70" x2="300" y2="62"/><line x1="96" y1="88" x2="300" y2="62"/>
+            </g>
+            <circle class="nring" cx="60" cy="54" r="11" fill="none" stroke="#f0a94e" stroke-width="1.4"/>
+            <circle class="nring" cx="112" cy="38" r="11" fill="none" stroke="#f0a94e" stroke-width="1.4"/>
+            <circle class="nring" cx="150" cy="70" r="11" fill="none" stroke="#f0a94e" stroke-width="1.4"/>
+            <circle class="nring" cx="96" cy="88" r="11" fill="none" stroke="#f0a94e" stroke-width="1.4"/>
+            <circle cx="60" cy="54" r="6" fill="#cfe8df"/><circle cx="112" cy="38" r="6" fill="#cfe8df"/>
+            <circle cx="150" cy="70" r="6" fill="#cfe8df"/><circle cx="96" cy="88" r="6" fill="#cfe8df"/>
+            <circle class="ahub" cx="300" cy="62" r="9" fill="#f0a94e"/>
+            <text class="ahub" x="300" y="84" text-anchor="middle" fill="#f0a94e" font-family="JetBrains Mono" font-size="9">one buyer</text>
+            <text class="glabel" x="10" y="14" fill="#5fe3ad" font-family="JetBrains Mono" font-size="10">shared address · phone</text>
+            <text class="alabel" x="350" y="14" text-anchor="end" fill="#f0a94e" font-family="JetBrains Mono" font-size="10">surface links drop · one buyer remains</text>
+          </svg>
+        </div>
+        <svg id="curve" viewBox="0 0 640 320" width="100%" preserveAspectRatio="xMidYMid meet" aria-label="recovery curve">
+          <!-- gridlines -->
+          <line x1="56" y1="40"  x2="616" y2="40"  stroke="#1a2c24" stroke-width="1"/>
+          <line x1="56" y1="158" x2="616" y2="158" stroke="#142019" stroke-width="1"/>
+          <line x1="56" y1="276" x2="616" y2="276" stroke="#1a2c24" stroke-width="1"/>
+          <text x="44" y="44"  text-anchor="end" fill="#566860" font-family="JetBrains Mono" font-size="12">1.0</text>
+          <text x="44" y="162" text-anchor="end" fill="#566860" font-family="JetBrains Mono" font-size="12">.75</text>
+          <text x="44" y="280" text-anchor="end" fill="#566860" font-family="JetBrains Mono" font-size="12">.50</text>
+          <!-- adversary adapts marker -->
+          <line id="adapt-line" x1="392" y1="28" x2="392" y2="288" stroke="#6e4f2b" stroke-width="1.5" stroke-dasharray="4 5"/>
+          <text id="adapt-label" x="392" y="20" text-anchor="middle" fill="#f0a94e" font-family="JetBrains Mono" font-size="11">adversary adapts</text>
+          <!-- round labels -->
+          <g fill="#566860" font-family="JetBrains Mono" font-size="11" text-anchor="middle">
+            <text x="56" y="306">R0</text><text x="168" y="306">R1</text><text x="280" y="306">R2</text>
+            <text x="392" y="306">R3</text><text x="504" y="306">R4</text><text x="616" y="306">R5</text>
+          </g>
+          <!-- Arm A (exploit) -->
+          <polyline id="armA" points="56,153 168,106 280,106 392,252 504,252 616,252"
+            fill="none" stroke="#7a5a32" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/>
+          <!-- Arm B (diverse) -->
+          <polyline id="armB" points="56,68 168,68 280,68 392,210 504,40 616,40"
+            fill="none" stroke="#5fe3ad" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"
+            style="filter:drop-shadow(0 0 6px rgba(95,227,173,.5))"/>
+          <circle id="recdot" cx="616" cy="40" r="5.5" fill="#5fe3ad" opacity="0"/>
+        </svg>
+        <div class="legend">
+          <span><i style="background:#5fe3ad"></i>diverse + exploration → recovers</span>
+          <span><i style="background:#7a5a32"></i>greedy / exploit → stays flat</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 INNGEST -->
+  <section class="slide" data-notes="And this isn't just a script. We built the adaptation loop as a live, durable workflow on Inngest. A new-data event fires, the swarm evaluates, and if performance drops it automatically explores, evolves, and recovers — every step observable. The swarm watches itself. (Switch to the Inngest dashboard run trace here.)">
+    <div class="eyebrow"><span class="num">06</span><span class="t">A live system</span></div>
+    <h1 class="lead">Not a script —<br>a system that <span style="color:var(--spore)">watches itself</span>.</h1>
+    <div class="flow">
+      <span class="node">evaluate</span><span class="arrow">→</span>
+      <span class="node drop">detect drop</span><span class="arrow">→</span>
+      <span class="node">explore</span><span class="arrow">→</span>
+      <span class="node">evolve</span><span class="arrow">→</span>
+      <span class="node rec">recover</span>
+    </div>
+    <div class="sub">The adaptation loop as a durable workflow on <b style="color:var(--bone);font-weight:600">Inngest</b> — event-driven, every step observable.</div>
+  </section>
+
+  <!-- 7 VISION -->
+  <section class="slide" data-notes="Even after a sharp decline last year, fentanyl still kills well over a hundred Americans every single day. The networks behind it constantly change disguise — and a fixed inspector falls behind. A self-evolving verification swarm keeps its anomaly-detection sharp as the adversary evolves, surfacing leads to investigators faster. To be clear: this surfaces leads, not verdicts. It works only on verifiable facts. The human makes the call. That boundary is the strength.">
+    <div class="eyebrow warm"><span class="num">07</span><span class="t" style="color:var(--amber)">Why it matters</span></div>
+    <h1 class="mega" style="color:var(--bone)">100<span style="color:var(--amber)">+</span></h1>
+    <div class="sub" style="margin-top:2vmin; font-size:clamp(19px,2.7vmin,30px); color:var(--bone)">Americans die from fentanyl <b style="font-weight:600">every day</b> — even after last year's sharp decline.</div>
+    <div class="sub">Networks change disguise; fixed inspectors fall behind. Self-evolving verification keeps pace — surfacing leads, faster.</div>
+    <div class="honest" style="margin-top:3vmin">
+      <div class="lbl">The boundary is the strength</div>
+      <div class="txt"><b>Leads, not verdicts.</b> Verifiable facts only. The human decides.</div>
+    </div>
+  </section>
+
+  <!-- 8 CLOSE -->
+  <section class="slide" data-notes="AutoSwarm: ungameable verification that evolves with the threat. Two domains, live on Inngest, built today. Thank you.">
+    <div class="brandmark"><span class="dot"></span><span>AutoSwarm</span></div>
+    <h1 class="lead">Ungameable verification<br>that evolves with the threat.</h1>
+    <div class="sub" style="font-family:var(--mono); color:var(--muted); font-size:clamp(14px,1.9vmin,19px); letter-spacing:.04em">Two domains · live on Inngest · built today.</div>
+    <div class="mathline" style="font-size:clamp(28px,5vmin,56px); margin-top:5vmin">Thank you.</div>
+  </section>
+
+</div>
+
+<div id="counter"><b id="cur">1</b> / <span id="tot">8</span></div>
+<div id="hint"><kbd>←</kbd><kbd>→</kbd> move · <kbd>N</kbd> notes · <kbd>F</kbd> full</div>
+<button id="back">‹ back</button>
+<div id="notes"><div class="nlbl">Speaker note</div><div id="ntext"></div></div>
+
+<script>
+(function(){
+  const slides=[...document.querySelectorAll('.slide')];
+  const bar=document.getElementById('bar'), cur=document.getElementById('cur'),
+        tot=document.getElementById('tot'), notes=document.getElementById('notes'),
+        ntext=document.getElementById('ntext');
+  let i=0, notesOn=false, animTimers=[];
+  tot.textContent=slides.length;
+
+  function at(fn,ms){ const id=setTimeout(fn,ms); animTimers.push(id); return id; }
+  function stopAnims(){ animTimers.forEach(clearTimeout); animTimers=[]; }
+
+  function drawCurve(){
+    const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+    const dot=document.getElementById('recdot');
+    ['armA','armB'].forEach(id=>{
+      const p=document.getElementById(id); const len=p.getTotalLength();
+      p.style.transition='none'; p.style.strokeDasharray=len; p.style.strokeDashoffset=len;
+    });
+    dot.style.transition='none'; dot.style.opacity='0';
+    if(reduce){ ['armA','armB'].forEach(id=>document.getElementById(id).style.strokeDashoffset=0); dot.style.opacity=1; return; }
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      ['armA','armB'].forEach((id,k)=>{
+        const p=document.getElementById(id);
+        p.style.transition='stroke-dashoffset 1.5s ease '+(k*0.25)+'s';
+        p.style.strokeDashoffset=0;
+      });
+      dot.style.transition='opacity .5s ease 1.9s'; dot.style.opacity=1;
+    }));
+    at(drawCurve, 4800);
+  }
+
+  function billPlay(){
+    const viz=document.getElementById('billviz'); if(!viz) return;
+    const errs=[...viz.querySelectorAll('.brow.err')];
+    const scan=document.getElementById('scan'), caught=document.getElementById('caught');
+    const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+    viz.querySelectorAll('.brow').forEach(r=>r.classList.remove('flagged'));
+    scan.classList.remove('sweep'); caught.classList.remove('done'); caught.textContent='auditing…';
+    if(reduce){ errs.forEach(r=>r.classList.add('flagged'));
+      caught.textContent=errs.length+' planted errors flagged'; caught.classList.add('done'); return; }
+    void scan.offsetWidth;              // restart the sweep animation
+    scan.classList.add('sweep');
+    errs.forEach((r,k)=> at(()=>r.classList.add('flagged'), 650+k*640));
+    at(()=>{ caught.textContent=errs.length+' planted errors flagged'; caught.classList.add('done'); }, 2550);
+    at(billPlay, 4600);
+  }
+
+  function netPlay(){
+    const net=document.getElementById('net'); if(!net) return;
+    const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+    net.classList.remove('b');
+    if(reduce){ net.classList.add('b'); return; }
+    at(()=>net.classList.add('b'), 1600);
+    at(netPlay, 4800);
+  }
+
+  function cmpPlay(){
+    const wrap=document.getElementById('cmp'); if(!wrap) return;
+    const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+    const dL=[...document.querySelectorAll('#cmpL .dot')];
+    const dR=[...document.querySelectorAll('#cmpR .dot')];
+    const agsR=[...document.querySelectorAll('#cmpR .agentR')];
+    const subL=document.getElementById('subL'), subR=document.getElementById('subR');
+    const litL=[2,3,6,7,8,11,12];
+    const cl=[[0,1,5,6],[3,4,8,9],[2,7,12],[10,11],[13,14]];
+    [...dL,...dR].forEach(d=>d.classList.remove('lit'));
+    agsR.forEach(a=>a.style.opacity='0');
+    subL.classList.remove('show'); subR.classList.remove('show');
+    if(reduce){
+      litL.forEach(i=>dL[i].classList.add('lit'));
+      agsR.forEach(a=>a.style.opacity='1'); cl.flat().forEach(i=>dR[i].classList.add('lit'));
+      subL.classList.add('show'); subR.classList.add('show'); return;
+    }
+    litL.forEach((idx,k)=> at(()=>dL[idx].classList.add('lit'), 400+k*230));
+    at(()=>subL.classList.add('show'), 400+litL.length*230+150);
+    const base=2500;
+    agsR.forEach((a,k)=> at(()=>a.style.opacity='1', base+k*200));
+    cl.forEach((c,k)=> at(()=>c.forEach(idx=>dR[idx].classList.add('lit')), base+260+k*200));
+    at(()=>subR.classList.add('show'), base+260+cl.length*200+150);
+    at(cmpPlay, 6000);
+  }
+
+  function show(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    bar.style.width=((i+1)/slides.length*100)+'%';
+    cur.textContent=i+1;
+    ntext.textContent=slides[i].getAttribute('data-notes')||'';
+    stopAnims();
+    if(slides[i].querySelector('#curve')) drawCurve();
+    if(slides[i].querySelector('#cmp')) cmpPlay();
+    if(slides[i].querySelector('#net')) netPlay();
+    if(slides[i].querySelector('#billviz')) billPlay();
+  }
+  function next(){show(i+1);} function prev(){show(i-1);}
+
+  document.addEventListener('keydown',e=>{
+    if(['ArrowRight','PageDown',' ','Enter'].includes(e.key)){e.preventDefault();next();}
+    else if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();prev();}
+    else if(e.key==='Home'){show(0);} else if(e.key==='End'){show(slides.length-1);}
+    else if(e.key==='n'||e.key==='N'){notesOn=!notesOn; notes.classList.toggle('on',notesOn);}
+    else if(e.key==='f'||e.key==='F'){
+      if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    }
+  });
+
+  document.getElementById('deck').addEventListener('click',next);
+  document.getElementById('back').addEventListener('click',e=>{e.stopPropagation();prev();});
+  notes.addEventListener('click',e=>e.stopPropagation());
+
+  // ambient swarm
+  const cv=document.getElementById('swarm'), ctx=cv.getContext('2d');
+  let W,H,pts,raf; const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function resize(){W=cv.width=innerWidth; H=cv.height=innerHeight;}
+  function init(){
+    pts=[]; const n=Math.min(46,Math.round(W*H/34000));
+    for(let k=0;k<n;k++)pts.push({x:Math.random()*W,y:Math.random()*H,
+      vx:(Math.random()-.5)*.16,vy:(Math.random()-.5)*.16,r:Math.random()*1.6+.5});
+  }
+  function tick(){
+    ctx.clearRect(0,0,W,H);
+    for(const p of pts){
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0)p.x+=W; if(p.x>W)p.x-=W; if(p.y<0)p.y+=H; if(p.y>H)p.y-=H;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fillStyle='rgba(95,227,173,.22)'; ctx.fill();
+    }
+    // faint links
+    for(let a=0;a<pts.length;a++)for(let b=a+1;b<pts.length;b++){
+      const dx=pts[a].x-pts[b].x, dy=pts[a].y-pts[b].y, d=dx*dx+dy*dy;
+      if(d<14000){ctx.beginPath();ctx.moveTo(pts[a].x,pts[a].y);ctx.lineTo(pts[b].x,pts[b].y);
+        ctx.strokeStyle='rgba(95,227,173,'+(.05*(1-d/14000))+')';ctx.lineWidth=1;ctx.stroke();}
+    }
+    raf=requestAnimationFrame(tick);
+  }
+  resize(); init();
+  if(!reduce){ tick(); } else { ctx.globalAlpha=.4; tick(); cancelAnimationFrame(raf); }
+  addEventListener('resize',()=>{resize();init();});
+
+  show(0);
+})();
+</script>
+</body>
+</html>
