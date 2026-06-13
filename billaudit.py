@@ -40,22 +40,21 @@ class LineItem:
     unit_price: float
 
 
-# 35 line items. Synthetic, not from any real patient or claim.
+# 56 line items. Synthetic, not from any real patient or claim.
 #
-# 10 planted errors (answer key below), 2 of each of the 5 types, mixing
-# obvious with subtle. Several are only detectable WITH the whole bill in view
-# (the duplicates compare to a far-away twin; the phantoms look out of place
-# only against the rest of the visit):
+# 20 planted errors (answer key below), 4 of each of the 5 types, mixing obvious
+# with subtle. The split (below) puts 13 errors in VALIDATION (ids 1-36) and 7
+# in TEST (ids 37-56) -- a validation set big enough that coverage (catching many
+# DIFFERENT errors) drives F1, instead of precision dominating on a tiny set.
+# Each of the 5 types appears in validation, so no single lens can win alone.
 #
-#   duplicate:  id 3  (adjacent twin of #2, obvious) ; id 19 (twin of #4, far apart, subtle)
-#   wrong CPT:  id 27 (71046 is a chest X-ray, billed as a lipid panel, obvious)
-#               id 11 (64483 is a lumbar epidural injection, billed as a flu vaccine, subtle)
-#   inflated:   id 7  (venipuncture $380 vs ~$15, obvious) ; id 23 (urinalysis $145 vs ~$15, subtle)
-#   phantom:    id 31 (colonoscopy on an otherwise sick-visit bill, obvious-ish)
-#               id 15 (brain MRI w/ & w/o contrast, never performed, subtle)
-#   quantity:   id 9  (6 psychotherapy sessions in one day, obvious)
-#               id 21 (12 immunization administrations, subtle-ish)
+#   duplicate:  ids 3,19,34 (val) ; 39 (test)   -- identical twin of an earlier line
+#   wrong CPT:  ids 11,27,35 (val) ; 51 (test)  -- CPT code does not match description
+#   inflated:   ids 7,23,36 (val) ; 50 (test)   -- unit price implausibly high
+#   phantom:    ids 15,31 (val) ; 46,54 (test)  -- costly service never performed
+#   quantity:   ids 9,21 (val) ; 48,53 (test)   -- impossible quantity
 BILL: list[LineItem] = [
+    # --- VALIDATION split (ids 1-36): 13 planted errors ---
     LineItem(1,  "99214", "Office/outpatient visit, established patient, 30-39 min", 1,  175.00),
     LineItem(2,  "99213", "Office/outpatient visit, established patient, 20-29 min", 1,  120.00),
     LineItem(3,  "99213", "Office/outpatient visit, established patient, 20-29 min", 1,  120.00),  # ERR duplicate of #2 (obvious)
@@ -67,7 +66,7 @@ BILL: list[LineItem] = [
     LineItem(9,  "90837", "Psychotherapy, 60 min",                                  6,  160.00),  # ERR quantity (6 sessions in one day impossible, obvious)
     LineItem(10, "84443", "Thyroid stimulating hormone (TSH)",                      1,   45.00),
     LineItem(11, "64483", "Influenza vaccine, quadrivalent, intramuscular",         1,   40.00),  # ERR wrong CPT (64483 = lumbar transforaminal epidural injection, subtle)
-    LineItem(12, "90471", "Immunization administration",                           1,   25.00),
+    LineItem(12, "90473", "Immunization administration, oral or intranasal",        1,   25.00),
     LineItem(13, "93000", "Electrocardiogram (ECG), routine, with interpretation",  1,   55.00),
     LineItem(14, "71046", "Chest X-ray, 2 views",                                   1,   90.00),
     LineItem(15, "70553", "MRI brain with and without contrast",                    1, 1200.00),  # ERR phantom (never performed, subtle)
@@ -76,7 +75,7 @@ BILL: list[LineItem] = [
     LineItem(18, "96372", "Therapeutic injection, subcutaneous/intramuscular",      1,   30.00),
     LineItem(19, "85025", "Complete blood count (CBC) with differential",           1,   35.00),  # ERR duplicate of #4 (far apart, subtle)
     LineItem(20, "87880", "Strep A rapid antigen test",                             1,   30.00),
-    LineItem(21, "90471", "Immunization administration",                          12,   25.00),  # ERR quantity (12 admins, subtle-ish)
+    LineItem(21, "90471", "Immunization administration, intramuscular",           12,   25.00),  # ERR quantity (12 admins, subtle)
     LineItem(22, "20610", "Arthrocentesis, major joint",                           1,  150.00),
     LineItem(23, "81002", "Urinalysis, non-automated, without microscopy",         1,  145.00),  # ERR inflated (~$15 typical, subtle)
     LineItem(24, "12001", "Simple repair of superficial wound, 2.5 cm",            1,  150.00),
@@ -89,12 +88,37 @@ BILL: list[LineItem] = [
     LineItem(31, "45378", "Colonoscopy, diagnostic",                               1,  950.00),  # ERR phantom (out of place on a sick visit, obvious-ish)
     LineItem(32, "97140", "Manual therapy techniques, 15 min",                     1,   40.00),
     LineItem(33, "99212", "Office/outpatient visit, established patient, 10-19 min", 1,  80.00),
-    LineItem(34, "73721", "MRI, lower extremity joint, without contrast",          1,  700.00),
-    LineItem(35, "85027", "Complete blood count (CBC), automated",                 1,   25.00),
+    LineItem(34, "80053", "Comprehensive metabolic panel",                         1,   45.00),  # ERR duplicate of #5 (subtle)
+    LineItem(35, "80048", "Chest X-ray, 1 view",                                   1,   90.00),  # ERR wrong CPT (80048 = basic metabolic panel, not an X-ray, subtle)
+    LineItem(36, "92012", "Eye exam, established patient, intermediate",           1,  360.00),  # ERR inflated (~$80 typical, subtle)
+    # --- TEST split (ids 37-56): 7 planted errors ---
+    LineItem(37, "99204", "Office/outpatient visit, new patient, 45-59 min",       1,  250.00),
+    LineItem(38, "85027", "Complete blood count (CBC), automated",                 1,   25.00),
+    LineItem(39, "80061", "Lipid panel",                                           1,   40.00),  # ERR duplicate of #6 (subtle)
+    LineItem(40, "84153", "Prostate specific antigen (PSA), total",               1,   50.00),
+    LineItem(41, "93005", "Electrocardiogram (ECG), tracing only",                1,   30.00),
+    LineItem(42, "73721", "MRI, lower extremity joint, without contrast",         1,  700.00),
+    LineItem(43, "90662", "Influenza vaccine, high-dose, intramuscular",          1,   65.00),
+    LineItem(44, "11042", "Debridement, subcutaneous tissue",                     1,  200.00),
+    LineItem(45, "99283", "Emergency department visit, moderate complexity",      1,  300.00),
+    LineItem(46, "74177", "CT abdomen and pelvis, with contrast",                 1,  900.00),  # ERR phantom (never performed, subtle)
+    LineItem(47, "87804", "Influenza, rapid antigen test",                        1,   35.00),
+    LineItem(48, "36415", "Routine venipuncture (blood draw)",                    4,   15.00),  # ERR quantity (4 draws in one visit, subtle)
+    LineItem(49, "64483", "Transforaminal epidural injection, lumbar",            1,  600.00),
+    LineItem(50, "20611", "Arthrocentesis, major joint, with ultrasound guidance", 1, 850.00),  # ERR inflated (~$175 typical, subtle)
+    LineItem(51, "96372", "Influenza vaccine, quadrivalent, intramuscular",       1,   40.00),  # ERR wrong CPT (96372 = therapeutic injection admin, not a vaccine, subtle)
+    LineItem(52, "81025", "Urine pregnancy test, visual color comparison",        1,   15.00),
+    LineItem(53, "99285", "Emergency department visit, high complexity",          8,  300.00),  # ERR quantity (8 ER visits, obvious)
+    LineItem(54, "70450", "CT head/brain, without contrast",                      1,  450.00),  # ERR phantom (never performed, subtle)
+    LineItem(55, "82550", "Creatine kinase (CK), total",                          1,   40.00),
+    LineItem(56, "94760", "Pulse oximetry, single measurement",                   1,   15.00),
 ]
 
-# Ground truth: the set of line ids that contain a planted error.
-ANSWER_KEY: set[int] = {3, 7, 9, 11, 15, 19, 21, 23, 27, 31}
+# Ground truth: the set of line ids that contain a planted error (20 total).
+ANSWER_KEY: set[int] = {
+    3, 7, 9, 11, 15, 19, 21, 23, 27, 31, 34, 35, 36,   # validation (13)
+    39, 46, 48, 50, 51, 53, 54,                          # test (7)
+}
 
 
 # ---------------------------------------------------------------------------
@@ -103,11 +127,10 @@ ANSWER_KEY: set[int] = {3, 7, 9, 11, 15, 19, 21, 23, 27, 31}
 #
 # Detectors always see the WHOLE bill (so cross-line context works); a "split"
 # here just means which line ids count toward a given score.
-#   VALIDATION (ids 1-20)  -> the ONLY selection signal during evolution
-#   TEST       (ids 21-35) -> scored exactly ONCE, at the very end
-# Errors per split: validation {3,7,9,11,15,19} (6) ; test {21,23,27,31} (4).
-VALIDATION_IDS: set[int] = set(range(1, 21))    # ids 1-20
-TEST_IDS:       set[int] = set(range(21, 36))   # ids 21-35
+#   VALIDATION (ids 1-36)  -> the ONLY selection signal during evolution (13 errors)
+#   TEST       (ids 37-56) -> scored exactly ONCE, at the very end (7 errors)
+VALIDATION_IDS: set[int] = set(range(1, 37))    # ids 1-36
+TEST_IDS:       set[int] = set(range(37, 57))   # ids 37-56
 
 
 # ---------------------------------------------------------------------------
@@ -347,55 +370,60 @@ def merge_prompts(prompt_a: str, prompt_b: str) -> str:
     return (resp.choices[0].message.content or "").strip()
 
 
-def greedy_ensemble_select(flags_by_name: dict[str, set[int]],
-                           val_truth: set[int]) -> tuple[list[str], float]:
-    """Greedily pick the subset of detectors that maximizes UNION validation F1.
+def select_fixed_ensemble(flags_by_name: dict[str, set[int]],
+                          val_truth: set[int],
+                          size: int = 4) -> tuple[list[str], float]:
+    """Pick a FIXED-SIZE ensemble that maximizes union validation F1, rewarding
+    marginal UNIQUE true-positives.
 
-    Start empty; repeatedly add the detector that most improves union validation
-    F1; stop when nothing helps. This keeps low-solo-score-but-unique specialists
-    (they earn their place by what they add to the ENSEMBLE, not their own F1).
+    Greedy over `size` slots: at each step pick the detector scoring highest on
+    (resulting union F1, NEW unique true-positives it adds). The unique-TP term
+    is the coverage-aware fix -- it breaks F1 ties toward the specialist that
+    catches errors no one else does, and, once F1 stops improving, fills the
+    remaining slots with the most diverse coverage rather than redundant picks.
+    Fixed size guarantees the survivor pool keeps >= 2 detectors, so merge always
+    has partners and the ensemble can never collapse to a singleton.
     """
     chosen: list[str] = []
     union: set[int] = set()
-    best = 0.0
+    covered_tp: set[int] = set()
     remaining = list(flags_by_name)
-    while remaining:
-        pick, pick_f1 = None, best
+    while remaining and len(chosen) < size:
+        best, best_key = None, None
         for n in remaining:
-            f1 = score(union | (flags_by_name[n] & VALIDATION_IDS), val_truth).f1
-            if f1 > pick_f1:
-                pick, pick_f1 = n, f1
-        if pick is None:
-            break  # nothing improves the union -> stop
-        chosen.append(pick)
-        union |= flags_by_name[pick] & VALIDATION_IDS
-        best = pick_f1
-        remaining.remove(pick)
-    if not chosen:  # degenerate: no detector scores > 0; keep the best solo one
-        chosen = [max(flags_by_name,
-                      key=lambda n: score(flags_by_name[n] & VALIDATION_IDS, val_truth).f1)]
-        best = score(flags_by_name[chosen[0]] & VALIDATION_IDS, val_truth).f1
-    return chosen, best
+            val_flags = flags_by_name[n] & VALIDATION_IDS
+            f1 = score(union | val_flags, val_truth).f1
+            unique_tp = len((val_flags & val_truth) - covered_tp)
+            key = (f1, unique_tp)  # maximize F1; break ties by marginal unique TPs
+            if best_key is None or key > best_key:
+                best, best_key = n, key
+        chosen.append(best)
+        union |= flags_by_name[best] & VALIDATION_IDS
+        covered_tp |= flags_by_name[best] & VALIDATION_IDS & val_truth
+        remaining.remove(best)
+    return chosen, score(union, val_truth).f1
 
 
 def evolve(initial_prompts: dict[str, str],
-           generations: int = 4, pop_size: int = 5) -> None:
-    """Ensemble-aware evolution: greedy union-F1 selection + mutation + merge.
+           generations: int = 4, pop_size: int = 8, ensemble_size: int = 4) -> None:
+    """Ensemble-aware evolution: fixed-size coverage-aware selection + merge + mutation.
 
-    The selection signal is the UNION ensemble's VALIDATION F1 (ids 1-20), NOT
-    any individual detector's score -- so unique specialists survive on what they
-    add to the ensemble. Each generation: greedily select the subset maximizing
-    union validation F1, then refill to pop_size with a couple of merges (kept
-    only if they raise union validation F1) plus mutations. The final selected
-    ensemble is scored on TEST (ids 21-35) exactly ONCE, at the very end.
+    The selection signal is the UNION ensemble's VALIDATION F1 (ids 1-36), NOT
+    any individual detector's score, and selection is FIXED-SIZE (`ensemble_size`)
+    with a marginal-unique-TP reward -- so unique specialists survive and the
+    ensemble can never collapse to a singleton. Each generation: select the
+    fixed-size ensemble, then refill the pool to `pop_size` with a couple of
+    merges (kept only if they raise union validation F1) plus mutations. The
+    final selected ensemble is scored on TEST (ids 37-56) exactly ONCE, at the end.
     """
     population = list(initial_prompts.items())  # [(name, system_prompt)]
     val_truth = ANSWER_KEY & VALIDATION_IDS
 
-    print("\nEVOLUTION (ensemble-fitness: union VALIDATION F1 = sole signal; +mutation +merge)")
-    print("=" * 64)
-    print(f"{'GEN':<5}{'POP':>5}{'SEL':>5}{'UNION VAL F1':>15}   selected ensemble")
-    print("-" * 64)
+    print(f"\nEVOLUTION (fixed-size-{ensemble_size} coverage-aware selection on union "
+          f"VALIDATION F1; +merge +mutation)")
+    print("=" * 72)
+    print(f"{'GEN':<5}{'POOL':>5}{'SEL':>5}{'UNION VAL F1':>15}   selected ensemble")
+    print("-" * 72)
 
     flags: dict[str, set[int]] = {}
     chosen: list[str] = []
@@ -404,7 +432,7 @@ def evolve(initial_prompts: dict[str, str],
         swarm = [(name, make_openai_detector(p)) for name, p in population]
         flags = run_swarm(swarm, BILL)  # whole bill seen; scored on a subset below
 
-        chosen, union_val = greedy_ensemble_select(flags, val_truth)
+        chosen, union_val = select_fixed_ensemble(flags, val_truth, size=ensemble_size)
         print(f"{gen:<5}{len(population):>5}{len(chosen):>5}{union_val:>15.2f}   {chosen}")
 
         # No point evolving after the final generation's score is recorded.
@@ -443,16 +471,16 @@ def evolve(initial_prompts: dict[str, str],
 
         population = next_pop
 
-    print("-" * 64)
+    print("-" * 72)
     # TEST scored exactly ONCE, on the FINAL selected ensemble.
     test_truth = ANSWER_KEY & TEST_IDS
     test_pred: set[int] = set()
     for name in chosen:
         test_pred |= flags[name] & TEST_IDS
     union_test = score(test_pred, test_truth).f1
-    print(f"FINAL selected ensemble: {chosen}")
+    print(f"FINAL selected ensemble ({len(chosen)}): {chosen}")
     print(f"FINAL union TEST F1 (scored once): {union_test:.2f}")
-    print("=" * 64)
+    print("=" * 72)
 
 
 def main() -> None:
@@ -467,7 +495,7 @@ def main() -> None:
     flags = run_swarm(SWARM, BILL)
 
     # Each detector + both ensembles, scored on the whole bill vs ANSWER_KEY.
-    print("RESULTS (whole 35-line bill)")
+    print(f"RESULTS (whole {len(BILL)}-line bill)")
     print("=" * 48)
     print(f"{'DETECTOR':<24}{'PREC':>8}{'RECALL':>8}{'F1':>8}")
     print("-" * 48)
@@ -481,9 +509,9 @@ def main() -> None:
     print(f"{'ENSEMBLE (union/any)':<24}{uni.precision:>8.2f}{uni.recall:>8.2f}{uni.f1:>8.2f}")
     print("=" * 48)
 
-    # Evolve: ensemble-fitness selection + mutation + merge over 4 generations,
-    # selecting on union validation F1; score test once at the end.
-    evolve(SYSTEM_PROMPTS, generations=4, pop_size=5)
+    # Evolve: fixed-size-4 coverage-aware selection + merge + mutation over 4
+    # generations, selecting on union validation F1; score test once at the end.
+    evolve(SYSTEM_PROMPTS, generations=4, pop_size=8, ensemble_size=4)
 
 
 if __name__ == "__main__":
