@@ -19,6 +19,7 @@ Before running: put your real key in .env  ->  OPENAI_API_KEY=sk-...
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
@@ -39,44 +40,72 @@ class LineItem:
     unit_price: float
 
 
-# 12 line items. Synthetic, not from any real patient or claim.
+# 35 line items. Synthetic, not from any real patient or claim.
 #
-# Planted errors (answer key below). A "context" line is included so some
-# errors are only detectable by comparison (e.g. the duplicate).
+# 10 planted errors (answer key below), 2 of each of the 5 types, mixing
+# obvious with subtle. Several are only detectable WITH the whole bill in view
+# (the duplicates compare to a far-away twin; the phantoms look out of place
+# only against the rest of the visit):
 #
-#   id 2  duplicate charge      — same CPT + description as id 1 (obvious-ish)
-#   id 5  wrong CPT code        — code says nerve block, description is a flu shot (subtle)
-#   id 7  inflated price        — routine venipuncture billed at $450 vs ~$15 (obvious)
-#   id 9  phantom service       — MRI w/ contrast that was never performed (subtle)
-#   id 11 quantity error        — 90-min psychotherapy billed qty 8 in one visit (obvious)
+#   duplicate:  id 3  (adjacent twin of #2, obvious) ; id 19 (twin of #4, far apart, subtle)
+#   wrong CPT:  id 27 (71046 is a chest X-ray, billed as a lipid panel, obvious)
+#               id 11 (64483 is a lumbar epidural injection, billed as a flu vaccine, subtle)
+#   inflated:   id 7  (venipuncture $380 vs ~$15, obvious) ; id 23 (urinalysis $145 vs ~$15, subtle)
+#   phantom:    id 31 (colonoscopy on an otherwise sick-visit bill, obvious-ish)
+#               id 15 (brain MRI w/ & w/o contrast, never performed, subtle)
+#   quantity:   id 9  (6 psychotherapy sessions in one day, obvious)
+#               id 21 (12 immunization administrations, subtle-ish)
 BILL: list[LineItem] = [
-    LineItem(1,  "99213", "Office/outpatient visit, established patient, 20-29 min", 1, 120.00),
-    LineItem(2,  "99213", "Office/outpatient visit, established patient, 20-29 min", 1, 120.00),  # ERR: duplicate of #1
-    LineItem(3,  "85025", "Complete blood count (CBC) with differential",            1,  35.00),
-    LineItem(4,  "80053", "Comprehensive metabolic panel",                           1,  45.00),
-    LineItem(5,  "64483", "Influenza vaccine, intramuscular",                        1,  40.00),  # ERR: CPT 64483 = transforaminal epidural injection, not a flu shot
-    LineItem(6,  "93000", "Electrocardiogram (ECG), routine, with interpretation",   1,  55.00),
-    LineItem(7,  "36415", "Routine venipuncture (blood draw)",                       1, 450.00),  # ERR: inflated (~$15 typical)
-    LineItem(8,  "71046", "Chest X-ray, 2 views",                                    1,  90.00),
-    LineItem(9,  "70553", "MRI brain with and without contrast",                     1, 1200.00), # ERR: phantom — never performed
-    LineItem(10, "99214", "Office/outpatient visit, established patient, 30-39 min", 1, 175.00),
-    LineItem(11, "90837", "Psychotherapy, 60 min",                                   8, 160.00),  # ERR: qty 8 in a single session is impossible
-    LineItem(12, "82947", "Glucose, quantitative, blood",                           1,  18.00),
+    LineItem(1,  "99214", "Office/outpatient visit, established patient, 30-39 min", 1,  175.00),
+    LineItem(2,  "99213", "Office/outpatient visit, established patient, 20-29 min", 1,  120.00),
+    LineItem(3,  "99213", "Office/outpatient visit, established patient, 20-29 min", 1,  120.00),  # ERR duplicate of #2 (obvious)
+    LineItem(4,  "85025", "Complete blood count (CBC) with differential",           1,   35.00),
+    LineItem(5,  "80053", "Comprehensive metabolic panel",                          1,   45.00),
+    LineItem(6,  "80061", "Lipid panel",                                            1,   40.00),
+    LineItem(7,  "36415", "Routine venipuncture (blood draw)",                      1,  380.00),  # ERR inflated (~$15 typical, obvious)
+    LineItem(8,  "83036", "Hemoglobin A1c",                                         1,   30.00),
+    LineItem(9,  "90837", "Psychotherapy, 60 min",                                  6,  160.00),  # ERR quantity (6 sessions in one day impossible, obvious)
+    LineItem(10, "84443", "Thyroid stimulating hormone (TSH)",                      1,   45.00),
+    LineItem(11, "64483", "Influenza vaccine, quadrivalent, intramuscular",         1,   40.00),  # ERR wrong CPT (64483 = lumbar transforaminal epidural injection, subtle)
+    LineItem(12, "90471", "Immunization administration",                           1,   25.00),
+    LineItem(13, "93000", "Electrocardiogram (ECG), routine, with interpretation",  1,   55.00),
+    LineItem(14, "71046", "Chest X-ray, 2 views",                                   1,   90.00),
+    LineItem(15, "70553", "MRI brain with and without contrast",                    1, 1200.00),  # ERR phantom (never performed, subtle)
+    LineItem(16, "81001", "Urinalysis, automated, with microscopy",                 1,   15.00),
+    LineItem(17, "99396", "Preventive visit, established patient, 40-64 yr",        1,  200.00),
+    LineItem(18, "96372", "Therapeutic injection, subcutaneous/intramuscular",      1,   30.00),
+    LineItem(19, "85025", "Complete blood count (CBC) with differential",           1,   35.00),  # ERR duplicate of #4 (far apart, subtle)
+    LineItem(20, "87880", "Strep A rapid antigen test",                             1,   30.00),
+    LineItem(21, "90471", "Immunization administration",                          12,   25.00),  # ERR quantity (12 admins, subtle-ish)
+    LineItem(22, "20610", "Arthrocentesis, major joint",                           1,  150.00),
+    LineItem(23, "81002", "Urinalysis, non-automated, without microscopy",         1,  145.00),  # ERR inflated (~$15 typical, subtle)
+    LineItem(24, "12001", "Simple repair of superficial wound, 2.5 cm",            1,  150.00),
+    LineItem(25, "17000", "Destruction of premalignant lesion (first lesion)",     1,  120.00),
+    LineItem(26, "97110", "Therapeutic exercise, 15 min",                          2,   40.00),
+    LineItem(27, "71046", "Lipid panel, fasting",                                   1,   40.00),  # ERR wrong CPT (71046 = chest X-ray, not a lipid panel, obvious)
+    LineItem(28, "99000", "Specimen handling / transfer",                          1,   10.00),
+    LineItem(29, "82947", "Glucose, quantitative, blood",                          1,   18.00),
+    LineItem(30, "90686", "Influenza vaccine, quadrivalent, intramuscular",        1,   40.00),
+    LineItem(31, "45378", "Colonoscopy, diagnostic",                               1,  950.00),  # ERR phantom (out of place on a sick visit, obvious-ish)
+    LineItem(32, "97140", "Manual therapy techniques, 15 min",                     1,   40.00),
+    LineItem(33, "99212", "Office/outpatient visit, established patient, 10-19 min", 1,  80.00),
+    LineItem(34, "73721", "MRI, lower extremity joint, without contrast",          1,  700.00),
+    LineItem(35, "85027", "Complete blood count (CBC), automated",                 1,   25.00),
 ]
 
 # Ground truth: the set of line ids that contain a planted error.
-ANSWER_KEY: set[int] = {2, 5, 7, 9, 11}
+ANSWER_KEY: set[int] = {3, 7, 9, 11, 15, 19, 21, 23, 27, 31}
 
 
 # ---------------------------------------------------------------------------
 # 2. Train / held-out split (~60/40), each keeping a mix of error + correct
 # ---------------------------------------------------------------------------
 #
-# 12 lines -> 7 train / 5 held-out.
-# Errors {2,5,7,9,11} split so neither side is all-error or all-correct:
-#   train errors:    {2, 7, 11}   held-out errors: {5, 9}
-TRAIN_IDS:    set[int] = {1, 2, 3, 6, 7, 10, 11}   # 3 of 5 errors, 4 correct
-HELDOUT_IDS:  set[int] = {4, 5, 8, 9, 12}           # 2 of 5 errors, 3 correct
+# 35 lines -> 20 train / 15 held-out. Errors split so neither side is all-error
+# or all-correct:  train errors {3,7,9,11,15,19} (6) ; held-out {21,23,27,31} (4).
+# (Kept for the evolution step; the swarm table below evaluates the WHOLE bill.)
+TRAIN_IDS:    set[int] = set(range(1, 21))    # ids 1-20
+HELDOUT_IDS:  set[int] = set(range(21, 36))   # ids 21-35
 
 TRAIN   = [li for li in BILL if li.id in TRAIN_IDS]
 HELDOUT = [li for li in BILL if li.id in HELDOUT_IDS]
@@ -117,86 +146,85 @@ def score(predicted_error_ids: set[int], truth_error_ids: set[int]) -> Score:
 # ---------------------------------------------------------------------------
 #
 # Signature contract for any detector:
-#     detector(line: LineItem) -> bool      # True == "this line is an error"
+#     detector(lines: list[LineItem]) -> set[int]   # ids it judges to be errors
+#
+# Each detector now sees the WHOLE bill (numbered) and returns the SET of error
+# ids -- so cross-line errors (duplicates, out-of-place phantom services) become
+# detectable by comparison, which per-line judgement could never catch.
 #
 # Each detector is the SAME model (gpt-4o-mini) seen through a DIFFERENT
 # system-prompt "lens". A factory builds one detector per strategy, so they all
-# share the signature and live in a plain list -> trivially swappable, and ready
-# to grow (an ensemble now; evolution later).
-
-_LINE_TEMPLATE = """Line item:
-  CPT code:    {cpt_code}
-  Description: {description}
-  Quantity:    {qty}
-  Unit price:  ${unit_price:.2f}
-
-Is this line item LIKELY a billing error? Answer with a single word: YES or NO."""
+# share the signature and live in a plain list -> trivially swappable.
 
 
-def _line_block(line: LineItem) -> str:
-    return _LINE_TEMPLATE.format(
-        cpt_code=line.cpt_code,
-        description=line.description,
-        qty=line.qty,
-        unit_price=line.unit_price,
+def _format_bill(lines: list[LineItem]) -> str:
+    return "\n".join(
+        f"  id {li.id}: CPT {li.cpt_code} | {li.description} "
+        f"| qty {li.qty} | ${li.unit_price:.2f}"
+        for li in lines
     )
 
 
-# Five strategies. Each one is biased toward a single failure mode and is told
-# to stay quiet on lines outside its specialty, so the swarm is diverse rather
-# than five copies of the same generalist.
+# Five strategies. Each one is biased toward a single failure mode, so the swarm
+# is diverse rather than five copies of the same generalist.
 SYSTEM_PROMPTS: dict[str, str] = {
     "duplicate": (
-        "You audit medical-bill line items, specializing in DUPLICATE / redundant "
-        "charges. Routine, low-cost services billed in standard units are the kind "
-        "most often double-billed. Answer YES only if this line looks like a "
-        "duplicate-prone or redundant charge; otherwise NO. Reply YES or NO only."
+        "You audit a whole medical bill, specializing in DUPLICATE / redundant "
+        "charges: the same service billed more than once for one encounter. "
+        "Compare line items against each other across the entire bill."
     ),
     "price": (
-        "You audit medical-bill line items, specializing in PRICE plausibility. "
-        "Compare the unit price against typical US rates for the described service. "
-        "Answer YES only if the price is implausibly inflated for what was done; "
-        "otherwise NO. Reply YES or NO only."
+        "You audit a whole medical bill, specializing in PRICE plausibility. "
+        "Compare each unit price against typical US rates for the described "
+        "service and flag prices that are implausibly inflated."
     ),
     "cpt_match": (
-        "You audit medical-bill line items, specializing in CPT-code/description "
-        "mismatches. Check whether the CPT code actually corresponds to the written "
-        "description of the service. Answer YES only if the code and description do "
-        "not match; otherwise NO. Reply YES or NO only."
+        "You audit a whole medical bill, specializing in CPT-code/description "
+        "mismatches: a line whose CPT code does not correspond to the written "
+        "description of the service."
     ),
     "phantom": (
-        "You audit medical-bill line items, specializing in PHANTOM or "
-        "never-performed services: high-cost procedures that look out of place or "
-        "unlikely to have actually been delivered. Answer YES only if the service "
-        "looks like it may not have been performed; otherwise NO. Reply YES or NO only."
+        "You audit a whole medical bill, specializing in PHANTOM / never-performed "
+        "services: high-cost or out-of-place procedures unlikely to have actually "
+        "been delivered given the rest of the visit."
     ),
     "general": (
-        "You audit medical-bill line items for ANY billing error: duplicates, "
-        "CPT/description mismatches, inflated prices, phantom services, or impossible "
-        "quantities. Answer YES if this line is likely a billing error; otherwise NO. "
-        "Reply YES or NO only."
+        "You audit a whole medical bill for ANY billing error: duplicates, "
+        "CPT/description mismatches, inflated prices, phantom services, or "
+        "impossible quantities."
     ),
 }
 
+_USER_TEMPLATE = """Here is a medical bill. Review ALL line items together, comparing them \
+against one another where useful.
+
+{bill}
+
+List the id numbers of every line item that is LIKELY a billing error.
+Respond with ONLY a comma-separated list of ids (e.g. "3, 7, 12").
+If no line is an error, respond with the single word NONE."""
+
 
 def make_openai_detector(system_prompt: str):
-    """Build a detector(line) -> bool backed by gpt-4o-mini under `system_prompt`."""
+    """Build a detector(lines) -> set[int] backed by gpt-4o-mini under `system_prompt`."""
 
-    def detector(line: LineItem) -> bool:
+    def detector(lines: list[LineItem]) -> set[int]:
         from openai import OpenAI
 
         client = OpenAI()  # reads OPENAI_API_KEY from the environment (.env)
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0,
-            max_tokens=3,
+            max_tokens=120,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": _line_block(line)},
+                {"role": "user", "content": _USER_TEMPLATE.format(bill=_format_bill(lines))},
             ],
         )
-        answer = (resp.choices[0].message.content or "").strip().upper()
-        return answer.startswith("Y")
+        text = (resp.choices[0].message.content or "").strip()
+        valid = {li.id for li in lines}
+        # Parse the integer ids the model returned; keep only ones on this bill.
+        return {int(tok) for tok in re.findall(r"\d+", text)} & valid
 
     return detector
 
@@ -214,11 +242,6 @@ DETECTOR = SWARM[-1][1]
 # 5. Harness
 # ---------------------------------------------------------------------------
 
-def run_detector(detector, lines: list[LineItem]) -> set[int]:
-    """Run `detector` over each line; return the set of ids it flagged."""
-    return {li.id for li in lines if detector(li)}
-
-
 def _check_key() -> bool:
     key = os.getenv("OPENAI_API_KEY", "")
     if not key or key == "replace-me":
@@ -235,8 +258,8 @@ def _check_key() -> bool:
 
 
 def run_swarm(swarm, lines: list[LineItem]) -> dict[str, set[int]]:
-    """Run every detector over `lines`; return {detector_name: flagged ids}."""
-    return {name: run_detector(det, lines) for name, det in swarm}
+    """Run every detector over the whole bill; return {detector_name: flagged ids}."""
+    return {name: det(lines) for name, det in swarm}
 
 
 def majority_ensemble(flags_by_detector: dict[str, set[int]],
@@ -347,49 +370,34 @@ def evolve(initial_prompts: dict[str, str],
 
 
 def main() -> None:
-    print("billaudit - medical-bill error detector (SWARM)\n")
-    print(f"Bill: {len(BILL)} lines | planted errors: {sorted(ANSWER_KEY)}")
-    print(f"Train ids:    {sorted(TRAIN_IDS)}")
-    print(f"Held-out ids: {sorted(HELDOUT_IDS)}")
-    print(f"Detectors:    {[name for name, _ in SWARM]}\n")
+    print("billaudit - medical-bill error detector (SWARM, whole-bill context)\n")
+    print(f"Bill: {len(BILL)} lines | planted errors ({len(ANSWER_KEY)}): {sorted(ANSWER_KEY)}")
+    print(f"Detectors: {[name for name, _ in SWARM]}\n")
 
     if not _check_key():
         return
 
-    train_truth   = ANSWER_KEY & TRAIN_IDS
-    heldout_truth = ANSWER_KEY & HELDOUT_IDS
+    print(f"Running {len(SWARM)} detectors (gpt-4o-mini); each sees the WHOLE bill...\n")
+    flags = run_swarm(SWARM, BILL)
 
-    print(f"Running {len(SWARM)} detectors (gpt-4o-mini) over each line...\n")
-    train_flags   = run_swarm(SWARM, TRAIN)
-    heldout_flags = run_swarm(SWARM, HELDOUT)
-
-    # Per-detector scores.
-    rows: list[tuple[str, Score, Score]] = []
+    # Each detector + both ensembles, scored on the whole bill vs ANSWER_KEY.
+    print("RESULTS (whole 35-line bill)")
+    print("=" * 48)
+    print(f"{'DETECTOR':<24}{'PREC':>8}{'RECALL':>8}{'F1':>8}")
+    print("-" * 48)
     for name, _ in SWARM:
-        ts = score(train_flags[name],   train_truth)
-        hs = score(heldout_flags[name], heldout_truth)
-        rows.append((name, ts, hs))
+        s = score(flags[name], ANSWER_KEY)
+        print(f"{name:<24}{s.precision:>8.2f}{s.recall:>8.2f}{s.f1:>8.2f}")
+    print("-" * 48)
+    maj = score(majority_ensemble(flags, BILL), ANSWER_KEY)
+    uni = score(union_ensemble(flags, BILL),    ANSWER_KEY)
+    print(f"{'ENSEMBLE (majority)':<24}{maj.precision:>8.2f}{maj.recall:>8.2f}{maj.f1:>8.2f}")
+    print(f"{'ENSEMBLE (union/any)':<24}{uni.precision:>8.2f}{uni.recall:>8.2f}{uni.f1:>8.2f}")
+    print("=" * 48)
 
-    # Ensembles, both derived from the same per-detector flags.
-    maj_ts = score(majority_ensemble(train_flags,   TRAIN),    train_truth)
-    maj_hs = score(majority_ensemble(heldout_flags, HELDOUT),  heldout_truth)
-    uni_ts = score(union_ensemble(train_flags,   TRAIN),       train_truth)
-    uni_hs = score(union_ensemble(heldout_flags, HELDOUT),     heldout_truth)
-
-    # Table.
-    print("RESULTS")
-    print("=" * 52)
-    print(f"{'DETECTOR':<22}{'TRAIN F1':>12}{'HELD-OUT F1':>16}")
-    print("-" * 52)
-    for name, ts, hs in rows:
-        print(f"{name:<22}{ts.f1:>12.2f}{hs.f1:>16.2f}")
-    print("-" * 52)
-    print(f"{'ENSEMBLE (majority)':<22}{maj_ts.f1:>12.2f}{maj_hs.f1:>16.2f}")
-    print(f"{'ENSEMBLE (union/any)':<22}{uni_ts.f1:>12.2f}{uni_hs.f1:>16.2f}")
-    print("=" * 52)
-
-    # Evolve the population for a few generations, watching the held-out curve.
-    evolve(SYSTEM_PROMPTS, generations=3, keep=2, pop_size=5)
+    # Evolution is paused for this milestone (substrate change only). The evolve()
+    # function and the train/held-out split below remain ready for the next step.
+    # evolve(SYSTEM_PROMPTS, generations=3, keep=2, pop_size=5)
 
 
 if __name__ == "__main__":
