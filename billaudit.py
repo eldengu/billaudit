@@ -256,6 +256,21 @@ def majority_ensemble(flags_by_detector: dict[str, set[int]],
     return flagged
 
 
+def union_ensemble(flags_by_detector: dict[str, set[int]],
+                   lines: list[LineItem]) -> set[int]:
+    """Flag a line if ANY single detector flagged it (1-vote threshold).
+
+    The opposite bet from majority voting: trust a lone confident specialist.
+    Should rescue subtle errors only one lens caught, at the cost of precision.
+    Derived from the same per-detector flags -> no extra API calls.
+    """
+    line_ids = {li.id for li in lines}
+    flagged = set()
+    for ids in flags_by_detector.values():
+        flagged |= ids
+    return flagged & line_ids
+
+
 def main() -> None:
     print("billaudit - medical-bill error detector (SWARM)\n")
     print(f"Bill: {len(BILL)} lines | planted errors: {sorted(ANSWER_KEY)}")
@@ -280,11 +295,11 @@ def main() -> None:
         hs = score(heldout_flags[name], heldout_truth)
         rows.append((name, ts, hs))
 
-    # Majority ensemble, derived from the same flags.
-    ens_train = majority_ensemble(train_flags,   TRAIN)
-    ens_held  = majority_ensemble(heldout_flags, HELDOUT)
-    ens_ts = score(ens_train, train_truth)
-    ens_hs = score(ens_held,  heldout_truth)
+    # Ensembles, both derived from the same per-detector flags.
+    maj_ts = score(majority_ensemble(train_flags,   TRAIN),    train_truth)
+    maj_hs = score(majority_ensemble(heldout_flags, HELDOUT),  heldout_truth)
+    uni_ts = score(union_ensemble(train_flags,   TRAIN),       train_truth)
+    uni_hs = score(union_ensemble(heldout_flags, HELDOUT),     heldout_truth)
 
     # Table.
     print("RESULTS")
@@ -294,7 +309,8 @@ def main() -> None:
     for name, ts, hs in rows:
         print(f"{name:<22}{ts.f1:>12.2f}{hs.f1:>16.2f}")
     print("-" * 52)
-    print(f"{'ENSEMBLE (majority)':<22}{ens_ts.f1:>12.2f}{ens_hs.f1:>16.2f}")
+    print(f"{'ENSEMBLE (majority)':<22}{maj_ts.f1:>12.2f}{maj_hs.f1:>16.2f}")
+    print(f"{'ENSEMBLE (union/any)':<22}{uni_ts.f1:>12.2f}{uni_hs.f1:>16.2f}")
     print("=" * 52)
 
 
