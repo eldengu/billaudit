@@ -271,6 +271,81 @@ def union_ensemble(flags_by_detector: dict[str, set[int]],
     return flagged & line_ids
 
 
+# ---------------------------------------------------------------------------
+# 6. Evolution (selection + mutation; no merge yet)
+# ---------------------------------------------------------------------------
+
+def mutate_prompt(system_prompt: str) -> str:
+    """Ask gpt-4o-mini to rewrite a detector's system prompt into a child variant."""
+    from openai import OpenAI
+
+    client = OpenAI()
+    meta = (
+        "Below is a SYSTEM PROMPT that tells an assistant how to judge whether a "
+        "single medical-bill line item is a billing error (it must answer YES or NO).\n"
+        "Rewrite it into an improved VARIANT that catches billing errors more "
+        "reliably while staying concise and still demanding a one-word YES/NO answer.\n"
+        "Return ONLY the rewritten system prompt, with no preamble or quotes.\n\n"
+        f"SYSTEM PROMPT:\n{system_prompt}"
+    )
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0.7,  # some spread so children differ from the parent
+        max_tokens=300,
+        messages=[{"role": "user", "content": meta}],
+    )
+    return (resp.choices[0].message.content or "").strip()
+
+
+def evolve(initial_prompts: dict[str, str],
+           generations: int = 3, keep: int = 2, pop_size: int = 5) -> None:
+    """Selection + mutation, using HELD-OUT F1 as the sole fitness signal.
+
+    Each generation: score the population on held-out, keep the top `keep`
+    (elitism), and refill back to `pop_size` with mutated children of the
+    survivors. Prints the best-detector and union held-out F1 per generation.
+    """
+    population = list(initial_prompts.items())  # [(name, system_prompt)]
+    heldout_truth = ANSWER_KEY & HELDOUT_IDS
+
+    print("\nEVOLUTION (selection + mutation; held-out F1 = sole fitness signal)")
+    print("=" * 52)
+    print(f"{'GEN':<6}{'POP':>5}{'BEST DETECTOR F1':>20}{'UNION F1':>12}")
+    print("-" * 52)
+
+    for gen in range(generations):
+        prompt_by_name = dict(population)
+        swarm = [(name, make_openai_detector(p)) for name, p in population]
+        flags = run_swarm(swarm, HELDOUT)
+
+        scored = sorted(
+            ((score(flags[name], heldout_truth).f1, name) for name, _ in swarm),
+            reverse=True,
+        )
+        union_f1 = score(union_ensemble(flags, HELDOUT), heldout_truth).f1
+        best_f1, best_name = scored[0]
+        print(f"{gen:<6}{len(population):>5}{best_f1:>20.2f}{union_f1:>12.2f}"
+              f"   (best: {best_name})")
+
+        # No point mutating after the final generation's score is recorded.
+        if gen == generations - 1:
+            break
+
+        # Selection: keep the top `keep` (elitism preserves the best so far).
+        survivors = [(name, prompt_by_name[name]) for _, name in scored[:keep]]
+
+        # Mutation: refill to pop_size with children of survivors (round-robin).
+        children: list[tuple[str, str]] = []
+        while len(survivors) + len(children) < pop_size:
+            parent_name, parent_prompt = survivors[len(children) % len(survivors)]
+            child = mutate_prompt(parent_prompt)
+            children.append((f"g{gen + 1}_child{len(children) + 1}", child))
+
+        population = survivors + children
+
+    print("=" * 52)
+
+
 def main() -> None:
     print("billaudit - medical-bill error detector (SWARM)\n")
     print(f"Bill: {len(BILL)} lines | planted errors: {sorted(ANSWER_KEY)}")
@@ -312,6 +387,9 @@ def main() -> None:
     print(f"{'ENSEMBLE (majority)':<22}{maj_ts.f1:>12.2f}{maj_hs.f1:>16.2f}")
     print(f"{'ENSEMBLE (union/any)':<22}{uni_ts.f1:>12.2f}{uni_hs.f1:>16.2f}")
     print("=" * 52)
+
+    # Evolve the population for a few generations, watching the held-out curve.
+    evolve(SYSTEM_PROMPTS, generations=3, keep=2, pop_size=5)
 
 
 if __name__ == "__main__":
