@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AutoSwarm — a self-evolving swarm of AI bill auditors</title>
+<meta name="description" content="A self-evolving swarm of AI auditors that catches planted medical-billing errors — ungameable by construction." />
+<style>
+  :root {
+    --bg:        #07100c;
+    --bg-2:      #0b1812;
+    --panel:     rgba(20, 38, 30, 0.55);
+    --panel-2:   rgba(16, 30, 24, 0.7);
+    --line:      rgba(120, 220, 170, 0.14);
+    --ink:       #e8f3ec;
+    --ink-soft:  #a7c4b4;
+    --ink-faint: #6f8c7e;
+    --spore:     #5ce8a8;
+    --spore-2:   #2fb37a;
+    --amber:     #ffcf6b;
+    --coral:     #ff8a6b;
+    --radius:    20px;
+    --maxw:      1080px;
+    --font:      "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:      "SFMono-Regular", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* organic living background — drifting spores / cells */
+  .field {
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    background:
+      radial-gradient(900px 600px at 80% -5%, rgba(47, 179, 122, 0.18), transparent 60%),
+      radial-gradient(700px 700px at 5% 20%, rgba(92, 232, 168, 0.10), transparent 55%),
+      radial-gradient(800px 800px at 50% 110%, rgba(47, 179, 122, 0.12), transparent 60%),
+      linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+  }
+  .blob {
+    position: fixed;
+    z-index: -1;
+    border-radius: 45% 55% 60% 40% / 55% 45% 55% 45%;
+    filter: blur(60px);
+    opacity: 0.35;
+    pointer-events: none;
+    animation: drift 26s ease-in-out infinite alternate;
+  }
+  .blob.a { width: 420px; height: 420px; top: 6%;  left: -120px; background: radial-gradient(circle, rgba(92,232,168,.5), transparent 70%); }
+  .blob.b { width: 520px; height: 520px; top: 48%; right: -160px; background: radial-gradient(circle, rgba(47,179,122,.45), transparent 70%); animation-duration: 34s; }
+  .blob.c { width: 360px; height: 360px; bottom: 4%; left: 30%; background: radial-gradient(circle, rgba(255,207,107,.18), transparent 70%); animation-duration: 30s; }
+  @keyframes drift {
+    0%   { transform: translate(0,0) rotate(0deg) scale(1); }
+    100% { transform: translate(40px,-30px) rotate(18deg) scale(1.12); }
+  }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- hero ---------- */
+  header.hero {
+    min-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 80px 0 60px;
+    position: relative;
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--spore);
+    font-weight: 600;
+    margin-bottom: 26px;
+  }
+  .eyebrow .pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--spore);
+    box-shadow: 0 0 0 0 rgba(92,232,168,.6);
+    animation: pulse 2.4s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(92,232,168,.5); }
+    70%  { box-shadow: 0 0 0 12px rgba(92,232,168,0); }
+    100% { box-shadow: 0 0 0 0 rgba(92,232,168,0); }
+  }
+  h1.title {
+    font-size: clamp(56px, 12vw, 132px);
+    line-height: 0.94;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    background: linear-gradient(135deg, #ffffff 0%, var(--spore) 55%, var(--spore-2) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-bottom: 28px;
+  }
+  .pitch {
+    font-size: clamp(18px, 2.4vw, 25px);
+    color: var(--ink-soft);
+    max-width: 720px;
+    font-weight: 400;
+  }
+  .pitch b { color: var(--ink); font-weight: 600; }
+  .hero-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 46px;
+  }
+  .chip {
+    display: flex; flex-direction: column;
+    padding: 14px 20px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    backdrop-filter: blur(8px);
+    min-width: 120px;
+  }
+  .chip .n { font-size: 26px; font-weight: 700; color: var(--spore); font-family: var(--mono); }
+  .chip .l { font-size: 12px; color: var(--ink-faint); letter-spacing: .04em; }
+  .scroll-hint {
+    margin-top: 56px; font-size: 13px; color: var(--ink-faint);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .scroll-hint .arr { animation: bob 1.8s ease-in-out infinite; }
+  @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(5px)} }
+
+  /* ---------- sections ---------- */
+  section { padding: 70px 0; position: relative; }
+  .seclabel {
+    font-size: 12.5px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--spore-2); font-weight: 700; margin-bottom: 14px;
+  }
+  h2 {
+    font-size: clamp(30px, 5vw, 46px);
+    font-weight: 750;
+    letter-spacing: -0.025em;
+    line-height: 1.08;
+    margin-bottom: 18px;
+  }
+  .lede { font-size: 18px; color: var(--ink-soft); max-width: 680px; }
+
+  /* ---------- ungameable pillars ---------- */
+  .pillars {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 16px;
+    margin-top: 40px;
+  }
+  .pillar {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 26px;
+    backdrop-filter: blur(8px);
+    transition: transform .3s ease, border-color .3s ease;
+  }
+  .pillar:hover { transform: translateY(-4px); border-color: rgba(92,232,168,.35); }
+  .pillar .ic {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: grid; place-items: center; margin-bottom: 16px;
+    background: rgba(92,232,168,.12); border: 1px solid rgba(92,232,168,.25);
+  }
+  .pillar h3 { font-size: 17px; font-weight: 650; margin-bottom: 8px; }
+  .pillar p { font-size: 14.5px; color: var(--ink-soft); }
+
+  /* ---------- finding cards ---------- */
+  .findings { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 40px; }
+  .finding {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(8px);
+    transition: transform .3s ease, border-color .3s ease;
+  }
+  .finding:hover { transform: translateY(-4px); border-color: rgba(92,232,168,.3); }
+  .finding::before {
+    content: "";
+    position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    background: linear-gradient(180deg, var(--spore), var(--spore-2));
+  }
+  .finding.warn::before { background: linear-gradient(180deg, var(--coral), #c0563a); }
+  .finding.good::before { background: linear-gradient(180deg, var(--spore), var(--spore-2)); }
+  .finding .step { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); letter-spacing: .1em; }
+  .finding h3 { font-size: 20px; font-weight: 700; margin: 8px 0 10px; }
+  .finding p { font-size: 15px; color: var(--ink-soft); }
+  .finding .metric {
+    display: inline-flex; align-items: baseline; gap: 8px;
+    margin-top: 16px; padding: 8px 14px;
+    border-radius: 10px; background: rgba(0,0,0,.25);
+    border: 1px solid var(--line); font-family: var(--mono);
+  }
+  .finding .metric .v { font-size: 22px; font-weight: 700; }
+  .finding .metric.bad .v  { color: var(--coral); }
+  .finding .metric.ok .v   { color: var(--spore); }
+  .finding .metric .k { font-size: 12px; color: var(--ink-faint); }
+
+  /* ---------- breakthrough / chart ---------- */
+  .breakout {
+    background: linear-gradient(160deg, var(--panel-2), rgba(10,22,17,.85));
+    border: 1px solid rgba(92,232,168,.22);
+    border-radius: 26px;
+    padding: 40px;
+    margin-top: 40px;
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 40px;
+    align-items: center;
+  }
+  .chartbox { width: 100%; }
+  .chart-cap { font-family: var(--mono); font-size: 12.5px; color: var(--ink-faint); margin-top: 12px; text-align: center; }
+  .merge-note {
+    margin-top: 22px; padding: 16px 18px;
+    background: rgba(92,232,168,.08);
+    border: 1px dashed rgba(92,232,168,.4);
+    border-radius: 14px;
+    font-size: 14.5px; color: var(--ink-soft);
+  }
+  .merge-note b { color: var(--spore); }
+  .bt-points { list-style: none; margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .bt-points li { display: flex; gap: 12px; font-size: 15px; color: var(--ink-soft); }
+  .bt-points .dot { color: var(--spore); font-weight: 800; }
+
+  /* svg chart styling */
+  svg .grid { stroke: rgba(255,255,255,.06); stroke-width: 1; }
+  svg .axis { stroke: rgba(255,255,255,.18); stroke-width: 1.2; }
+  svg .curve { fill: none; stroke: var(--spore); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
+               filter: drop-shadow(0 0 8px rgba(92,232,168,.5)); }
+  svg .area { fill: url(#fade); opacity: .55; }
+  svg .pt { fill: #06120c; stroke: var(--spore); stroke-width: 3; }
+  svg .pt-merge { fill: var(--amber); stroke: #06120c; stroke-width: 2.5; }
+  svg text { fill: var(--ink-faint); font-family: var(--mono); font-size: 12px; }
+  svg text.val { fill: var(--spore); font-weight: 700; font-size: 13px; }
+
+  /* ---------- honest callout ---------- */
+  .honest {
+    margin-top: 46px;
+    border-radius: 26px;
+    padding: 44px;
+    background:
+      radial-gradient(600px 300px at 100% 0%, rgba(255,207,107,.14), transparent 60%),
+      linear-gradient(135deg, rgba(40,32,12,.6), rgba(20,16,8,.7));
+    border: 1px solid rgba(255,207,107,.32);
+    position: relative;
+  }
+  .honest .tag {
+    font-size: 12.5px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--amber); font-weight: 700; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .honest .gap {
+    display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin: 8px 0 20px;
+  }
+  .honest .gap .num { font-family: var(--mono); font-weight: 800; line-height: 1; }
+  .honest .gap .num .big { font-size: 56px; display: block; }
+  .honest .gap .num .lab { font-size: 12px; color: var(--ink-faint); letter-spacing: .08em; }
+  .honest .gap .vN .big { color: var(--spore); }
+  .honest .gap .tN .big { color: var(--coral); }
+  .honest .gap .vs { font-size: 22px; color: var(--ink-faint); font-weight: 700; }
+  .honest p { font-size: 17px; color: var(--ink); max-width: 760px; }
+  .honest p .em { color: var(--amber); font-weight: 650; }
+
+  /* ---------- footer ---------- */
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 40px 0 70px;
+    color: var(--ink-faint);
+    font-size: 13.5px;
+  }
+  footer .frow { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; align-items: center; }
+  footer b { color: var(--ink-soft); }
+  .pipeline {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 30px;
+    font-family: var(--mono); font-size: 12.5px;
+  }
+  .pipeline span {
+    padding: 6px 12px; border-radius: 8px;
+    background: var(--panel); border: 1px solid var(--line); color: var(--ink-soft);
+  }
+  .pipeline .arr { border: none; background: none; color: var(--ink-faint); padding: 6px 2px; }
+
+  .reveal { opacity: 0; transform: translateY(24px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (max-width: 780px) {
+    .findings { grid-template-columns: 1fr; }
+    .breakout { grid-template-columns: 1fr; padding: 28px; }
+    .honest { padding: 30px; }
+    section { padding: 54px 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .blob, .scroll-hint .arr, .eyebrow .pulse { animation: none; }
+    .reveal { transition: none; opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="field"></div>
+  <div class="blob a"></div>
+  <div class="blob b"></div>
+  <div class="blob c"></div>
+
+  <!-- ===================== HERO ===================== -->
+  <header class="hero">
+    <div class="wrap">
+      <span class="eyebrow"><span class="pulse"></span> Self-evolving error detection</span>
+      <h1 class="title">AutoSwarm</h1>
+      <p class="pitch">
+        A self-evolving swarm of AI auditors that catches planted errors —
+        <b>ungameable, because we plant the errors and hold the answer key.</b>
+      </p>
+
+      <div class="hero-stats">
+        <div class="chip"><span class="n">56</span><span class="l">bill line items</span></div>
+        <div class="chip"><span class="n">20</span><span class="l">planted errors</span></div>
+        <div class="chip"><span class="n">5</span><span class="l">strategy lenses</span></div>
+        <div class="chip"><span class="n">0.87</span><span class="l">best validation F1</span></div>
+      </div>
+
+      <div class="scroll-hint"><span class="arr">↓</span> the experiment, honestly reported</div>
+    </div>
+  </header>
+
+  <!-- ===================== WHY UNGAMEABLE ===================== -->
+  <section id="ungameable">
+    <div class="wrap reveal">
+      <div class="seclabel">The guarantee</div>
+      <h2>Why it can't be gamed</h2>
+      <p class="lede">Most "AI catches errors" demos quietly grade themselves. This one is built so the model
+        cannot fake its way to a good score.</p>
+
+      <div class="pillars">
+        <div class="pillar">
+          <div class="ic">🌱</div>
+          <h3>We plant the errors</h3>
+          <p>The bill is synthetic. Twenty errors of five known types are seeded deliberately — duplicate, wrong CPT, inflated price, phantom service, impossible quantity.</p>
+        </div>
+        <div class="pillar">
+          <div class="ic">🔑</div>
+          <h3>We hold the answer key</h3>
+          <p>Ground truth is the exact set of error line ids. The detector never sees it — it's only ever used to score, never to prompt.</p>
+        </div>
+        <div class="pillar">
+          <div class="ic">⚖️</div>
+          <h3>F1, not recall</h3>
+          <p>Precision and recall together. "Flag everything" tanks precision, so spraying the whole bill can never win — coverage has to be earned.</p>
+        </div>
+        <div class="pillar">
+          <div class="ic">🔒</div>
+          <h3>Test scored once</h3>
+          <p>Selection runs only on the validation split. The held-out test set is scored exactly one time, at the very end — no peeking, no tuning to it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FINDINGS ===================== -->
+  <section id="story">
+    <div class="wrap reveal">
+      <div class="seclabel">The research story</div>
+      <h2>Four findings, each one a dead end that taught us something</h2>
+      <p class="lede">We didn't get a swarm on the first try. We got there by watching simpler ideas fail, on the record.</p>
+
+      <div class="findings">
+        <div class="finding warn">
+          <div class="step">FINDING A</div>
+          <h3>One detector isn't enough</h3>
+          <p>A single gpt-4o-mini auditor reliably catches the obvious errors but slides right past the subtle ones — the far-apart duplicate, the CPT code quietly mislabeled as a flu shot. A lone lens has blind spots.</p>
+        </div>
+
+        <div class="finding warn">
+          <div class="step">FINDING B</div>
+          <h3>Majority voting buried the one expert who was right</h3>
+          <p>Run five specialist lenses and take the majority vote, and a subtle error caught by only <em>one</em> specialist gets out-voted by the four that missed it. On held-out errors, majority scored nothing.</p>
+          <span class="metric bad"><span class="v">0.00</span><span class="k">held-out F1 · majority</span></span>
+        </div>
+
+        <div class="finding good">
+          <div class="step">FINDING C</div>
+          <h3>Union recovered the lone specialist</h3>
+          <p>Flip the rule: flag a line if <em>any</em> lens flags it. Now the single correct specialist is trusted instead of out-voted. The same held-out errors that majority missed came back into view.</p>
+          <span class="metric ok"><span class="v">0.67</span><span class="k">held-out F1 · union</span></span>
+        </div>
+
+        <div class="finding warn">
+          <div class="step">FINDING D</div>
+          <h3>Greedy selection eroded the ensemble</h3>
+          <p>When evolution kept the top detectors by their <em>individual</em> score, it threw away low-scoring-but-unique specialists (like the CPT lens). Union coverage collapsed — motivating <b>ensemble-fitness selection + a merge operator</b>.</p>
+          <span class="metric bad"><span class="v">0.67→0.50</span><span class="k">union F1 · eroding</span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== BREAKTHROUGH ===================== -->
+  <section id="breakthrough">
+    <div class="wrap reveal">
+      <div class="seclabel">The breakthrough</div>
+      <h2>Coverage-aware selection, plus merge</h2>
+      <p class="lede">Select a <b>fixed-size</b> ensemble that maximizes the <b>union's</b> validation F1 — and reward
+        each detector for the unique errors only it catches. Now specialists survive on what they add to the team,
+        and a merge operator can breed new hybrids.</p>
+
+      <div class="breakout">
+        <div class="chartbox">
+          <!-- inline SVG line chart: union validation F1 across generations -->
+          <svg viewBox="0 0 460 300" width="100%" role="img" aria-label="Union validation F1 across four generations: 0.82, 0.82, 0.87, 0.87">
+            <defs>
+              <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="rgba(92,232,168,.45)"/>
+                <stop offset="100%" stop-color="rgba(92,232,168,0)"/>
+              </linearGradient>
+            </defs>
+            <!-- y gridlines at F1 = 0.80, 0.85, 0.90 -->
+            <g id="grid"></g>
+            <!-- axes -->
+            <line class="axis" x1="56" y1="40" x2="56" y2="248" />
+            <line class="axis" x1="56" y1="248" x2="436" y2="248" />
+            <!-- area + curve + points injected by JS -->
+            <path class="area" id="area" d="" />
+            <path class="curve" id="curve" d="" />
+            <g id="pts"></g>
+            <g id="xlabels"></g>
+            <g id="ylabels"></g>
+          </svg>
+          <div class="chart-cap">union validation F1 · generations 0 → 3</div>
+        </div>
+
+        <div>
+          <ul class="bt-points">
+            <li><span class="dot">◇</span><span>Fixed size <b>4</b> — the ensemble can never collapse to a single detector, so merge always has partners.</span></li>
+            <li><span class="dot">◇</span><span>Selection rewards <b>marginal unique true-positives</b>: a specialist earns its slot for errors no teammate catches.</span></li>
+            <li><span class="dot">◇</span><span>Validation F1 <b>held, then climbed</b> — 0.82 → 0.82 → 0.87 → 0.87 — instead of eroding.</span></li>
+          </ul>
+          <div class="merge-note">
+            🧬 <b>A merged hybrid was born and selected.</b> In generation 2, two surviving prompts were
+            combined into one child covering both their error types. It beat the survivors' union on validation
+            and earned a permanent place in the ensemble.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== HONEST CALLOUT ===================== -->
+  <section id="honest">
+    <div class="wrap reveal">
+      <div class="honest">
+        <div class="tag">⚠ The honest result</div>
+        <div class="gap">
+          <div class="num vN"><span class="big">0.87</span><span class="lab">VALIDATION F1</span></div>
+          <div class="vs">vs</div>
+          <div class="num tN"><span class="big">0.62</span><span class="lab">TEST F1</span></div>
+        </div>
+        <p>
+          <span class="em">Validation 0.87 vs Test 0.62 — a real generalization gap</span>, deliberately exposed by
+          scoring the held-out test only once. We could have hidden it by tuning against the test set, or by never
+          holding one out. We didn't. <span class="em">The honesty is the point:</span> a benchmark you can't game
+          includes the part where you admit it didn't fully generalize.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer>
+    <div class="wrap">
+      <div class="pipeline">
+        <span>synthetic bill</span><span class="arr">→</span>
+        <span>5 lenses</span><span class="arr">→</span>
+        <span>union ensemble</span><span class="arr">→</span>
+        <span>evolve: select · merge · mutate</span><span class="arr">→</span>
+        <span>score test once</span>
+      </div>
+      <div class="frow" style="margin-top:28px">
+        <div><b>AutoSwarm</b> — self-evolving medical-bill error detection. Synthetic data only; no real patients or claims.</div>
+        <div>Pre-computed results · static page · no API key · no server</div>
+      </div>
+    </div>
+  </footer>
+
+<script>
+  // ---- evolution data (hard-coded, pre-computed) ----
+  const F1 = [0.82, 0.82, 0.87, 0.87];   // union validation F1, gen 0..3
+  const MERGE_GEN = 2;                    // generation where the merged hybrid was selected
+
+  // chart geometry
+  const X0 = 56, X1 = 436, Y0 = 248, Y1 = 40;
+  const yMin = 0.78, yMax = 0.90;        // a little padding around the data
+  const xOf = i => X0 + (X1 - X0) * (i / (F1.length - 1));
+  const yOf = v => Y0 + (Y1 - Y0) * ((v - yMin) / (yMax - yMin));
+
+  const grid = document.getElementById('grid');
+  const ylabels = document.getElementById('ylabels');
+  [0.80, 0.85, 0.90].forEach(v => {
+    const y = yOf(v);
+    const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('class','grid'); l.setAttribute('x1',X0); l.setAttribute('x2',X1);
+    l.setAttribute('y1',y); l.setAttribute('y2',y); grid.appendChild(l);
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', X0 - 10); t.setAttribute('y', y + 4); t.setAttribute('text-anchor','end');
+    t.textContent = v.toFixed(2); ylabels.appendChild(t);
+  });
+
+  // x labels
+  const xlabels = document.getElementById('xlabels');
+  F1.forEach((_, i) => {
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', xOf(i)); t.setAttribute('y', Y0 + 22); t.setAttribute('text-anchor','middle');
+    t.textContent = 'gen ' + i; xlabels.appendChild(t);
+  });
+
+  // curve + area paths
+  const pts = F1.map((v,i)=>[xOf(i), yOf(v)]);
+  const lineD = pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  document.getElementById('curve').setAttribute('d', lineD);
+  document.getElementById('area').setAttribute('d',
+    lineD + ` L ${X1} ${Y0} L ${X0} ${Y0} Z`);
+
+  // points + value labels
+  const pg = document.getElementById('pts');
+  pts.forEach((p,i) => {
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    const merged = (i === MERGE_GEN);
+    c.setAttribute('cx',p[0]); c.setAttribute('cy',p[1]); c.setAttribute('r', merged ? 7 : 5);
+    c.setAttribute('class', merged ? 'pt-merge' : 'pt'); pg.appendChild(c);
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('class','val'); t.setAttribute('x',p[0]); t.setAttribute('y',p[1]-14);
+    t.setAttribute('text-anchor','middle'); t.textContent = F1[i].toFixed(2); pg.appendChild(t);
+  });
+  // annotate the merge point
+  const mt = document.createElementNS('http://www.w3.org/2000/svg','text');
+  mt.setAttribute('x', xOf(MERGE_GEN)); mt.setAttribute('y', yOf(F1[MERGE_GEN]) + 26);
+  mt.setAttribute('text-anchor','middle'); mt.setAttribute('fill','#ffcf6b');
+  mt.textContent = '◆ merge selected'; pg.appendChild(mt);
+
+  // ---- scroll reveal ----
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
+</html>
