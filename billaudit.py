@@ -322,61 +322,137 @@ def mutate_prompt(system_prompt: str) -> str:
     return (resp.choices[0].message.content or "").strip()
 
 
-def evolve(initial_prompts: dict[str, str],
-           generations: int = 4, keep: int = 2, pop_size: int = 5) -> None:
-    """Selection + mutation, using VALIDATION F1 as the sole fitness signal.
+def merge_prompts(prompt_a: str, prompt_b: str) -> str:
+    """Ask gpt-4o-mini to combine two detector prompts into one covering BOTH lenses."""
+    from openai import OpenAI
 
-    Detectors always see the whole bill; only the VALIDATION ids (1-20) count
-    toward fitness. Each generation: score the population on validation F1, keep
-    the top `keep` (elitism), and refill to `pop_size` with mutated children.
-    Prints best + union validation F1 per generation, then scores the final
-    population's union ensemble on the TEST ids (21-35) exactly ONCE at the end.
+    client = OpenAI()
+    meta = (
+        "Below are TWO system prompts, each giving an assistant a strategy/lens for "
+        "auditing a WHOLE medical bill and returning a comma-separated list of the "
+        "ids that are billing errors.\n"
+        "Combine them into ONE system prompt that covers BOTH strategies and both "
+        "error types at once, while staying concise. Keep it a whole-bill strategy "
+        "description; do NOT change the output format and do NOT tell it to answer "
+        "YES/NO.\n"
+        "Return ONLY the combined system prompt, with no preamble or quotes.\n\n"
+        f"PROMPT A:\n{prompt_a}\n\nPROMPT B:\n{prompt_b}"
+    )
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0.7,
+        max_tokens=350,
+        messages=[{"role": "user", "content": meta}],
+    )
+    return (resp.choices[0].message.content or "").strip()
+
+
+def greedy_ensemble_select(flags_by_name: dict[str, set[int]],
+                           val_truth: set[int]) -> tuple[list[str], float]:
+    """Greedily pick the subset of detectors that maximizes UNION validation F1.
+
+    Start empty; repeatedly add the detector that most improves union validation
+    F1; stop when nothing helps. This keeps low-solo-score-but-unique specialists
+    (they earn their place by what they add to the ENSEMBLE, not their own F1).
+    """
+    chosen: list[str] = []
+    union: set[int] = set()
+    best = 0.0
+    remaining = list(flags_by_name)
+    while remaining:
+        pick, pick_f1 = None, best
+        for n in remaining:
+            f1 = score(union | (flags_by_name[n] & VALIDATION_IDS), val_truth).f1
+            if f1 > pick_f1:
+                pick, pick_f1 = n, f1
+        if pick is None:
+            break  # nothing improves the union -> stop
+        chosen.append(pick)
+        union |= flags_by_name[pick] & VALIDATION_IDS
+        best = pick_f1
+        remaining.remove(pick)
+    if not chosen:  # degenerate: no detector scores > 0; keep the best solo one
+        chosen = [max(flags_by_name,
+                      key=lambda n: score(flags_by_name[n] & VALIDATION_IDS, val_truth).f1)]
+        best = score(flags_by_name[chosen[0]] & VALIDATION_IDS, val_truth).f1
+    return chosen, best
+
+
+def evolve(initial_prompts: dict[str, str],
+           generations: int = 4, pop_size: int = 5) -> None:
+    """Ensemble-aware evolution: greedy union-F1 selection + mutation + merge.
+
+    The selection signal is the UNION ensemble's VALIDATION F1 (ids 1-20), NOT
+    any individual detector's score -- so unique specialists survive on what they
+    add to the ensemble. Each generation: greedily select the subset maximizing
+    union validation F1, then refill to pop_size with a couple of merges (kept
+    only if they raise union validation F1) plus mutations. The final selected
+    ensemble is scored on TEST (ids 21-35) exactly ONCE, at the very end.
     """
     population = list(initial_prompts.items())  # [(name, system_prompt)]
     val_truth = ANSWER_KEY & VALIDATION_IDS
 
-    print("\nEVOLUTION (select on VALIDATION ids 1-20; TEST ids 21-35 scored once at end)")
-    print("=" * 56)
-    print(f"{'GEN':<5}{'POP':>5}{'BEST VAL F1':>14}{'UNION VAL F1':>16}")
-    print("-" * 56)
+    print("\nEVOLUTION (ensemble-fitness: union VALIDATION F1 = sole signal; +mutation +merge)")
+    print("=" * 64)
+    print(f"{'GEN':<5}{'POP':>5}{'SEL':>5}{'UNION VAL F1':>15}   selected ensemble")
+    print("-" * 64)
 
     flags: dict[str, set[int]] = {}
+    chosen: list[str] = []
     for gen in range(generations):
         prompt_by_name = dict(population)
         swarm = [(name, make_openai_detector(p)) for name, p in population]
         flags = run_swarm(swarm, BILL)  # whole bill seen; scored on a subset below
 
-        scored = sorted(
-            ((score(flags[name] & VALIDATION_IDS, val_truth).f1, name) for name, _ in swarm),
-            reverse=True,
-        )
-        union_val = score(union_ensemble(flags, BILL) & VALIDATION_IDS, val_truth).f1
-        best_f1, best_name = scored[0]
-        print(f"{gen:<5}{len(population):>5}{best_f1:>14.2f}{union_val:>16.2f}"
-              f"   (best: {best_name})")
+        chosen, union_val = greedy_ensemble_select(flags, val_truth)
+        print(f"{gen:<5}{len(population):>5}{len(chosen):>5}{union_val:>15.2f}   {chosen}")
 
-        # No point mutating after the final generation's score is recorded.
+        # No point evolving after the final generation's score is recorded.
         if gen == generations - 1:
             break
 
-        # Selection: keep the top `keep` (elitism preserves the best so far).
-        survivors = [(name, prompt_by_name[name]) for _, name in scored[:keep]]
+        survivors = [(name, prompt_by_name[name]) for name in chosen]
+        next_pop = list(survivors)  # ensemble-level elitism
 
-        # Mutation: refill to pop_size with children of survivors (round-robin).
-        children: list[tuple[str, str]] = []
-        while len(survivors) + len(children) < pop_size:
-            parent_name, parent_prompt = survivors[len(children) % len(survivors)]
-            child = mutate_prompt(parent_prompt)
-            children.append((f"g{gen + 1}_child{len(children) + 1}", child))
+        # Baseline the operators must beat: the survivors' union on validation.
+        surv_union: set[int] = set()
+        for name in chosen:
+            surv_union |= flags[name] & VALIDATION_IDS
+        surv_f1 = score(surv_union, val_truth).f1
 
-        population = survivors + children
+        # MERGE: try a couple of survivor pairs; keep a merge only if it raises union val F1.
+        pairs = [(survivors[i], survivors[j])
+                 for i in range(len(survivors))
+                 for j in range(i + 1, len(survivors))][:2]
+        for (na, pa), (nb, pb) in pairs:
+            if len(next_pop) >= pop_size:
+                break
+            merged = merge_prompts(pa, pb)
+            mflags = make_openai_detector(merged)(BILL) & VALIDATION_IDS
+            if score(surv_union | mflags, val_truth).f1 > surv_f1:
+                next_pop.append((f"g{gen + 1}_merge_{na}+{nb}", merged))
+                surv_union |= mflags
+                surv_f1 = score(surv_union, val_truth).f1
 
-    print("-" * 56)
-    # TEST scored exactly ONCE, here, from the final generation's flags.
+        # MUTATION: fill remaining slots with mutated survivors.
+        k = 0
+        while len(next_pop) < pop_size:
+            _, pprompt = survivors[k % len(survivors)]
+            next_pop.append((f"g{gen + 1}_mut{k + 1}", mutate_prompt(pprompt)))
+            k += 1
+
+        population = next_pop
+
+    print("-" * 64)
+    # TEST scored exactly ONCE, on the FINAL selected ensemble.
     test_truth = ANSWER_KEY & TEST_IDS
-    union_test = score(union_ensemble(flags, BILL) & TEST_IDS, test_truth).f1
-    print(f"FINAL  union TEST F1 (scored once): {union_test:.2f}")
-    print("=" * 56)
+    test_pred: set[int] = set()
+    for name in chosen:
+        test_pred |= flags[name] & TEST_IDS
+    union_test = score(test_pred, test_truth).f1
+    print(f"FINAL selected ensemble: {chosen}")
+    print(f"FINAL union TEST F1 (scored once): {union_test:.2f}")
+    print("=" * 64)
 
 
 def main() -> None:
@@ -405,8 +481,9 @@ def main() -> None:
     print(f"{'ENSEMBLE (union/any)':<24}{uni.precision:>8.2f}{uni.recall:>8.2f}{uni.f1:>8.2f}")
     print("=" * 48)
 
-    # Evolve: select on validation F1 over 4 generations, score test once at end.
-    evolve(SYSTEM_PROMPTS, generations=4, keep=2, pop_size=5)
+    # Evolve: ensemble-fitness selection + mutation + merge over 4 generations,
+    # selecting on union validation F1; score test once at the end.
+    evolve(SYSTEM_PROMPTS, generations=4, pop_size=5)
 
 
 if __name__ == "__main__":
