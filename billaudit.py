@@ -113,22 +113,18 @@ def score(predicted_error_ids: set[int], truth_error_ids: set[int]) -> Score:
 
 
 # ---------------------------------------------------------------------------
-# 4. The detector (SWAPPABLE)
+# 4. The SWARM of detectors (SWAPPABLE)
 # ---------------------------------------------------------------------------
 #
 # Signature contract for any detector:
 #     detector(line: LineItem) -> bool      # True == "this line is an error"
 #
-# Swap `DETECTOR = openai_detector` for any function with this signature
-# (rules engine, ensemble/swarm, a different model) without touching the harness.
+# Each detector is the SAME model (gpt-4o-mini) seen through a DIFFERENT
+# system-prompt "lens". A factory builds one detector per strategy, so they all
+# share the signature and live in a plain list -> trivially swappable, and ready
+# to grow (an ensemble now; evolution later).
 
-_PROMPT = """You are auditing a single line item from a medical bill for billing errors.
-
-Common billing errors include: duplicate charges, a CPT code that does not match \
-the service description, an implausibly inflated unit price, a phantom service \
-(billed but not medically performed), and an impossible quantity.
-
-Line item:
+_LINE_TEMPLATE = """Line item:
   CPT code:    {cpt_code}
   Description: {description}
   Quantity:    {qty}
@@ -137,31 +133,81 @@ Line item:
 Is this line item LIKELY a billing error? Answer with a single word: YES or NO."""
 
 
-def openai_detector(line: LineItem) -> bool:
-    """Ask gpt-4o-mini whether one line is likely a billing error. Returns bool."""
-    from openai import OpenAI
-
-    client = OpenAI()  # reads OPENAI_API_KEY from the environment (.env)
-    resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        temperature=0,
-        max_tokens=3,
-        messages=[{
-            "role": "user",
-            "content": _PROMPT.format(
-                cpt_code=line.cpt_code,
-                description=line.description,
-                qty=line.qty,
-                unit_price=line.unit_price,
-            ),
-        }],
+def _line_block(line: LineItem) -> str:
+    return _LINE_TEMPLATE.format(
+        cpt_code=line.cpt_code,
+        description=line.description,
+        qty=line.qty,
+        unit_price=line.unit_price,
     )
-    answer = (resp.choices[0].message.content or "").strip().upper()
-    return answer.startswith("Y")
 
 
-# Active detector. Point this at anything matching the signature contract.
-DETECTOR = openai_detector
+# Five strategies. Each one is biased toward a single failure mode and is told
+# to stay quiet on lines outside its specialty, so the swarm is diverse rather
+# than five copies of the same generalist.
+SYSTEM_PROMPTS: dict[str, str] = {
+    "duplicate": (
+        "You audit medical-bill line items, specializing in DUPLICATE / redundant "
+        "charges. Routine, low-cost services billed in standard units are the kind "
+        "most often double-billed. Answer YES only if this line looks like a "
+        "duplicate-prone or redundant charge; otherwise NO. Reply YES or NO only."
+    ),
+    "price": (
+        "You audit medical-bill line items, specializing in PRICE plausibility. "
+        "Compare the unit price against typical US rates for the described service. "
+        "Answer YES only if the price is implausibly inflated for what was done; "
+        "otherwise NO. Reply YES or NO only."
+    ),
+    "cpt_match": (
+        "You audit medical-bill line items, specializing in CPT-code/description "
+        "mismatches. Check whether the CPT code actually corresponds to the written "
+        "description of the service. Answer YES only if the code and description do "
+        "not match; otherwise NO. Reply YES or NO only."
+    ),
+    "phantom": (
+        "You audit medical-bill line items, specializing in PHANTOM or "
+        "never-performed services: high-cost procedures that look out of place or "
+        "unlikely to have actually been delivered. Answer YES only if the service "
+        "looks like it may not have been performed; otherwise NO. Reply YES or NO only."
+    ),
+    "general": (
+        "You audit medical-bill line items for ANY billing error: duplicates, "
+        "CPT/description mismatches, inflated prices, phantom services, or impossible "
+        "quantities. Answer YES if this line is likely a billing error; otherwise NO. "
+        "Reply YES or NO only."
+    ),
+}
+
+
+def make_openai_detector(system_prompt: str):
+    """Build a detector(line) -> bool backed by gpt-4o-mini under `system_prompt`."""
+
+    def detector(line: LineItem) -> bool:
+        from openai import OpenAI
+
+        client = OpenAI()  # reads OPENAI_API_KEY from the environment (.env)
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0,
+            max_tokens=3,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": _line_block(line)},
+            ],
+        )
+        answer = (resp.choices[0].message.content or "").strip().upper()
+        return answer.startswith("Y")
+
+    return detector
+
+
+# The swarm: a list of (name, detector) pairs, all matching the signature.
+SWARM: list[tuple[str, object]] = [
+    (name, make_openai_detector(prompt)) for name, prompt in SYSTEM_PROMPTS.items()
+]
+
+# Backwards-compatible single-detector handle (the general lens).
+DETECTOR = SWARM[-1][1]
 
 
 # ---------------------------------------------------------------------------
@@ -188,19 +234,34 @@ def _check_key() -> bool:
     return True
 
 
-def _print_score(label: str, lines: list[LineItem], s: Score) -> None:
-    truth = {li.id for li in lines if li.id in ANSWER_KEY}
-    print(f"  {label}")
-    print(f"    lines={len(lines)}  errors_present={len(truth)}  "
-          f"(tp={s.tp} fp={s.fp} fn={s.fn})")
-    print(f"    precision={s.precision:.2f}  recall={s.recall:.2f}  F1={s.f1:.2f}")
+def run_swarm(swarm, lines: list[LineItem]) -> dict[str, set[int]]:
+    """Run every detector over `lines`; return {detector_name: flagged ids}."""
+    return {name: run_detector(det, lines) for name, det in swarm}
+
+
+def majority_ensemble(flags_by_detector: dict[str, set[int]],
+                      lines: list[LineItem]) -> set[int]:
+    """Flag a line if a strict majority of detectors flagged it.
+
+    Derived from the per-detector flags above, so the ensemble costs no extra
+    API calls.
+    """
+    n = len(flags_by_detector)
+    threshold = n // 2 + 1
+    flagged = set()
+    for li in lines:
+        votes = sum(1 for ids in flags_by_detector.values() if li.id in ids)
+        if votes >= threshold:
+            flagged.add(li.id)
+    return flagged
 
 
 def main() -> None:
-    print("billaudit - medical-bill error detector (SPINE)\n")
+    print("billaudit - medical-bill error detector (SWARM)\n")
     print(f"Bill: {len(BILL)} lines | planted errors: {sorted(ANSWER_KEY)}")
     print(f"Train ids:    {sorted(TRAIN_IDS)}")
-    print(f"Held-out ids: {sorted(HELDOUT_IDS)}\n")
+    print(f"Held-out ids: {sorted(HELDOUT_IDS)}")
+    print(f"Detectors:    {[name for name, _ in SWARM]}\n")
 
     if not _check_key():
         return
@@ -208,20 +269,33 @@ def main() -> None:
     train_truth   = ANSWER_KEY & TRAIN_IDS
     heldout_truth = ANSWER_KEY & HELDOUT_IDS
 
-    print("Running detector (gpt-4o-mini) over each line...\n")
-    train_pred   = run_detector(DETECTOR, TRAIN)
-    heldout_pred = run_detector(DETECTOR, HELDOUT)
+    print(f"Running {len(SWARM)} detectors (gpt-4o-mini) over each line...\n")
+    train_flags   = run_swarm(SWARM, TRAIN)
+    heldout_flags = run_swarm(SWARM, HELDOUT)
 
-    train_score   = score(train_pred,   train_truth)
-    heldout_score = score(heldout_pred, heldout_truth)
+    # Per-detector scores.
+    rows: list[tuple[str, Score, Score]] = []
+    for name, _ in SWARM:
+        ts = score(train_flags[name],   train_truth)
+        hs = score(heldout_flags[name], heldout_truth)
+        rows.append((name, ts, hs))
 
+    # Majority ensemble, derived from the same flags.
+    ens_train = majority_ensemble(train_flags,   TRAIN)
+    ens_held  = majority_ensemble(heldout_flags, HELDOUT)
+    ens_ts = score(ens_train, train_truth)
+    ens_hs = score(ens_held,  heldout_truth)
+
+    # Table.
     print("RESULTS")
-    print("-" * 64)
-    _print_score("TRAIN", TRAIN, train_score)
-    print()
-    _print_score("HELD-OUT", HELDOUT, heldout_score)
-    print("-" * 64)
-    print(f"  TRAIN F1 = {train_score.f1:.2f}   |   HELD-OUT F1 = {heldout_score.f1:.2f}")
+    print("=" * 52)
+    print(f"{'DETECTOR':<22}{'TRAIN F1':>12}{'HELD-OUT F1':>16}")
+    print("-" * 52)
+    for name, ts, hs in rows:
+        print(f"{name:<22}{ts.f1:>12.2f}{hs.f1:>16.2f}")
+    print("-" * 52)
+    print(f"{'ENSEMBLE (majority)':<22}{ens_ts.f1:>12.2f}{ens_hs.f1:>16.2f}")
+    print("=" * 52)
 
 
 if __name__ == "__main__":
